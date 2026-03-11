@@ -2,7 +2,7 @@
  * localStorage persistence for dashboard filter, pagination, and sort state.
  */
 
-import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter, TriageLayout } from '../types/dashboard.ts';
+import { TRIAGE_ASSIGNEE, type SessionFilter, type PaginationState, type SortState, type DashboardTab, type TriageFilter, type TriageLayout } from '../types/dashboard.ts';
 
 // Storage keys
 const FILTER_KEY = 'tarsy-filters';
@@ -177,7 +177,7 @@ export function loadDashboardTab(): DashboardTab {
 // ────────────────────────────────────────────────────────────
 
 export function getDefaultTriageFilters(): TriageFilter {
-  return { assignee: 'all' };
+  return { assignee: TRIAGE_ASSIGNEE.ALL };
 }
 
 export function saveTriageFilters(filters: TriageFilter): void {

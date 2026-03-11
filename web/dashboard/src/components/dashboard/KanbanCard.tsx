@@ -30,7 +30,7 @@ import { ScoreBadge } from '../common/ScoreBadge.tsx';
 import { formatTimestamp } from '../../utils/format.ts';
 import { sessionDetailPath, sessionScoringPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
-import type { TriageGroupKey } from '../../types/api.ts';
+import { TRIAGE_GROUP, type TriageGroupKey } from '../../types/api.ts';
 
 interface KanbanCardProps {
   session: DashboardSessionItem;
@@ -118,7 +118,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
       {/* Row 1: Status + Alert type + Score + Actions */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
         <StatusBadge status={session.status} size="small" />
-        {group === 'resolved' && session.resolution_reason && (
+        {group === TRIAGE_GROUP.RESOLVED && session.resolution_reason && (
           <Tooltip title={resolutionReasonConfig[session.resolution_reason]?.label ?? session.resolution_reason}>
             <Box
               sx={{
@@ -194,7 +194,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
       )}
 
       {/* Row 4: Actions */}
-      {group !== 'investigating' && !isDragOverlay && (
+      {group !== TRIAGE_GROUP.INVESTIGATING && !isDragOverlay && (
         <Box
           className="kanban-actions"
           sx={{
@@ -207,7 +207,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {group === 'needs_review' && (
+          {group === TRIAGE_GROUP.NEEDS_REVIEW && (
             <>
               <Button
                 size="small"
@@ -231,7 +231,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
             </>
           )}
 
-          {group === 'in_progress' && (
+          {group === TRIAGE_GROUP.IN_PROGRESS && (
             <>
               <Button
                 size="small"
@@ -255,7 +255,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
             </>
           )}
 
-          {group === 'resolved' && (
+          {group === TRIAGE_GROUP.RESOLVED && (
             <>
               <Tooltip title={session.resolution_note || 'Add note'}>
                 <IconButton
@@ -296,22 +296,22 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
                 <ListItemIcon><OpenInNew fontSize="small" /></ListItemIcon>
                 <ListItemText>Open in new tab</ListItemText>
               </MenuItem>
-              {group === 'needs_review' && (
+              {group === TRIAGE_GROUP.NEEDS_REVIEW && (
                 <MenuItem disabled={actionLoading} onClick={() => { setMenuAnchor(null); onClaim?.(session.id); }}>
                   <ListItemText>Claim</ListItemText>
                 </MenuItem>
               )}
-              {group === 'in_progress' && (
+              {group === TRIAGE_GROUP.IN_PROGRESS && (
                 <MenuItem disabled={actionLoading} onClick={() => { setMenuAnchor(null); onUnclaim?.(session.id); }}>
                   <ListItemText>Unclaim</ListItemText>
                 </MenuItem>
               )}
-              {(group === 'needs_review' || group === 'in_progress') && (
+              {(group === TRIAGE_GROUP.NEEDS_REVIEW || group === TRIAGE_GROUP.IN_PROGRESS) && (
                 <MenuItem disabled={actionLoading} onClick={() => { setMenuAnchor(null); onResolve?.(session.id); }}>
                   <ListItemText>Resolve</ListItemText>
                 </MenuItem>
               )}
-              {group === 'resolved' && (
+              {group === TRIAGE_GROUP.RESOLVED && (
                 <MenuItem disabled={actionLoading} onClick={() => { setMenuAnchor(null); onReopen?.(session.id); }}>
                   <ListItemText>Reopen</ListItemText>
                 </MenuItem>
@@ -326,7 +326,7 @@ const KanbanCardInner = forwardRef<HTMLDivElement, KanbanCardProps & {
 
 export function KanbanCard(props: KanbanCardProps) {
   const { session, group, isDragOverlay } = props;
-  const isDraggable = group !== 'investigating' && !isDragOverlay;
+  const isDraggable = group !== TRIAGE_GROUP.INVESTIGATING && !isDragOverlay;
 
   const {
     attributes,

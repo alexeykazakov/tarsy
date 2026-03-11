@@ -15,7 +15,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { KanbanCard } from './KanbanCard.tsx';
 import { PaginationControls } from './PaginationControls.tsx';
 import type { DashboardSessionItem } from '../../types/session.ts';
-import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
+import { TRIAGE_GROUP, type TriageGroup, type TriageGroupKey } from '../../types/api.ts';
 
 interface KanbanColumnProps {
   groupKey: TriageGroupKey;
@@ -76,7 +76,7 @@ export function KanbanColumn({
   onCardHover,
 }: KanbanColumnProps) {
   const config = columnConfigs[groupKey];
-  const isDropDisabled = groupKey === 'investigating';
+  const isDropDisabled = groupKey === TRIAGE_GROUP.INVESTIGATING;
   const sessions: DashboardSessionItem[] = groupData?.sessions ?? [];
   const count = groupData?.count ?? 0;
   const showPagination = count > 10;

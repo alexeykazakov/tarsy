@@ -34,9 +34,18 @@ export interface SortState {
 /** Active dashboard tab. */
 export type DashboardTab = 'sessions' | 'triage';
 
+/** Assignee filter values for the triage view. */
+export const TRIAGE_ASSIGNEE = {
+  ALL: 'all',
+  MINE: 'mine',
+  UNASSIGNED: 'unassigned',
+} as const;
+
+export type TriageAssignee = (typeof TRIAGE_ASSIGNEE)[keyof typeof TRIAGE_ASSIGNEE];
+
 /** Filter state for the triage view. */
 export interface TriageFilter {
-  assignee: 'all' | 'mine' | 'unassigned';
+  assignee: TriageAssignee;
 }
 
 /** Layout mode for the triage view. */

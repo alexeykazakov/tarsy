@@ -88,6 +88,13 @@ export interface ScoreSessionResponse {
 
 export type TriageGroupKey = 'investigating' | 'needs_review' | 'in_progress' | 'resolved';
 
+export const TRIAGE_GROUP = {
+  INVESTIGATING: 'investigating',
+  NEEDS_REVIEW: 'needs_review',
+  IN_PROGRESS: 'in_progress',
+  RESOLVED: 'resolved',
+} as const satisfies Record<string, TriageGroupKey>;
+
 /** Paginated response for a single triage group. */
 export interface TriageGroup {
   count: number;

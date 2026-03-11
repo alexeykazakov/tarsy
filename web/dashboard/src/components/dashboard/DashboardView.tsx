@@ -56,9 +56,9 @@ import {
   EVENT_SESSION_SCORE_UPDATED,
   EVENT_REVIEW_STATUS,
 } from '../../constants/eventTypes.ts';
-import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
+import { TRIAGE_ASSIGNEE, type SessionFilter, type PaginationState, type SortState, type DashboardTab, type TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
-import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams } from '../../types/api.ts';
+import { TRIAGE_GROUP, type DashboardListParams, type TriageGroup, type TriageGroupKey, type TriageGroupParams } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
 import {
@@ -333,9 +333,13 @@ export function DashboardView() {
   const triageRequestIdRef = useRef(0);
 
   const buildTriageParams = useCallback((groupKey?: TriageGroupKey): TriageGroupParams => {
+    const filterMode = triageFiltersRef.current.assignee;
+    // investigating and needs_review sessions never have an assignee,
+    // so the "mine" filter is inapplicable — skip it for those groups.
+    const groupHasAssignee = groupKey !== TRIAGE_GROUP.INVESTIGATING && groupKey !== TRIAGE_GROUP.NEEDS_REVIEW;
     const assignee =
-      triageFiltersRef.current.assignee === 'mine' ? (userEmailRef.current || undefined) :
-      triageFiltersRef.current.assignee === 'unassigned' ? '' :
+      (filterMode === TRIAGE_ASSIGNEE.MINE && groupHasAssignee) ? (userEmailRef.current || undefined) :
+      (filterMode === TRIAGE_ASSIGNEE.UNASSIGNED && groupHasAssignee) ? '' :
       undefined;
     const params: TriageGroupParams = {};
     if (assignee !== undefined) params.assignee = assignee;

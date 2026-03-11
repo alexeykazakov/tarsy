@@ -7,7 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Refresh, ViewList, ViewKanban } from '@mui/icons-material';
-import type { TriageFilter, TriageLayout } from '../../types/dashboard.ts';
+import { TRIAGE_ASSIGNEE, type TriageFilter, type TriageLayout } from '../../types/dashboard.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
 interface TriageFilterBarProps {
@@ -60,13 +60,13 @@ export function TriageFilterBar({
         onChange={handleAssigneeChange}
         size="small"
       >
-        <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>
+        <ToggleButton value={TRIAGE_ASSIGNEE.ALL} sx={{ textTransform: 'none', px: 2 }}>
           All
         </ToggleButton>
-        <ToggleButton value="mine" sx={{ textTransform: 'none', px: 2 }}>
+        <ToggleButton value={TRIAGE_ASSIGNEE.MINE} sx={{ textTransform: 'none', px: 2 }}>
           Mine
         </ToggleButton>
-        <ToggleButton value="unassigned" sx={{ textTransform: 'none', px: 2 }}>
+        <ToggleButton value={TRIAGE_ASSIGNEE.UNASSIGNED} sx={{ textTransform: 'none', px: 2 }}>
           Unassigned
         </ToggleButton>
       </ToggleButtonGroup>

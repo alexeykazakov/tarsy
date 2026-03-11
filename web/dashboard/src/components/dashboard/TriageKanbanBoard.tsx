@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { KanbanColumn } from './KanbanColumn.tsx';
 import { KanbanCardInner } from './KanbanCard.tsx';
-import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
+import { TRIAGE_GROUP, type TriageGroup, type TriageGroupKey } from '../../types/api.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 interface TriageKanbanBoardProps {
@@ -32,19 +32,24 @@ function resolveDropAction(
   targetGroup: TriageGroupKey,
 ): 'claim' | 'unclaim' | 'resolve' | 'reopen' | null {
   if (sourceGroup === targetGroup) return null;
-  if (sourceGroup === 'investigating' || targetGroup === 'investigating') return null;
+  if (sourceGroup === TRIAGE_GROUP.INVESTIGATING || targetGroup === TRIAGE_GROUP.INVESTIGATING) return null;
 
-  if (sourceGroup === 'needs_review' && targetGroup === 'in_progress') return 'claim';
-  if (sourceGroup === 'in_progress' && targetGroup === 'needs_review') return 'unclaim';
-  if (sourceGroup === 'needs_review' && targetGroup === 'resolved') return 'resolve';
-  if (sourceGroup === 'in_progress' && targetGroup === 'resolved') return 'resolve';
-  if (sourceGroup === 'resolved' && targetGroup === 'needs_review') return 'reopen';
+  if (sourceGroup === TRIAGE_GROUP.NEEDS_REVIEW && targetGroup === TRIAGE_GROUP.IN_PROGRESS) return 'claim';
+  if (sourceGroup === TRIAGE_GROUP.IN_PROGRESS && targetGroup === TRIAGE_GROUP.NEEDS_REVIEW) return 'unclaim';
+  if (sourceGroup === TRIAGE_GROUP.NEEDS_REVIEW && targetGroup === TRIAGE_GROUP.RESOLVED) return 'resolve';
+  if (sourceGroup === TRIAGE_GROUP.IN_PROGRESS && targetGroup === TRIAGE_GROUP.RESOLVED) return 'resolve';
+  if (sourceGroup === TRIAGE_GROUP.RESOLVED && targetGroup === TRIAGE_GROUP.NEEDS_REVIEW) return 'reopen';
 
   // resolved -> in_progress not a valid direct transition
   return null;
 }
 
-const COLUMN_ORDER: TriageGroupKey[] = ['investigating', 'needs_review', 'in_progress', 'resolved'];
+const COLUMN_ORDER: TriageGroupKey[] = [
+  TRIAGE_GROUP.INVESTIGATING,
+  TRIAGE_GROUP.NEEDS_REVIEW,
+  TRIAGE_GROUP.IN_PROGRESS,
+  TRIAGE_GROUP.RESOLVED,
+];
 
 export function TriageKanbanBoard({
   groups,
