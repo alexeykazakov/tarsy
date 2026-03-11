@@ -2,7 +2,7 @@
  * localStorage persistence for dashboard filter, pagination, and sort state.
  */
 
-import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../types/dashboard.ts';
+import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter, TriageLayout } from '../types/dashboard.ts';
 
 // Storage keys
 const FILTER_KEY = 'tarsy-filters';
@@ -10,6 +10,7 @@ const PAGINATION_KEY = 'tarsy-pagination';
 const SORT_KEY = 'tarsy-sort';
 const DASHBOARD_TAB_KEY = 'tarsy-dashboard-tab';
 const TRIAGE_FILTERS_KEY = 'tarsy-triage-filters';
+const TRIAGE_LAYOUT_KEY = 'tarsy-triage-layout';
 
 // ────────────────────────────────────────────────────────────
 // Defaults
@@ -143,6 +144,7 @@ export function clearAllDashboardState(): void {
     localStorage.removeItem(SORT_KEY);
     localStorage.removeItem(DASHBOARD_TAB_KEY);
     localStorage.removeItem(TRIAGE_FILTERS_KEY);
+    localStorage.removeItem(TRIAGE_LAYOUT_KEY);
   } catch {
     // ignore
   }
@@ -194,4 +196,26 @@ export function loadTriageFilters(): TriageFilter | null {
     // ignore
   }
   return null;
+}
+
+// ────────────────────────────────────────────────────────────
+// Triage layout
+// ────────────────────────────────────────────────────────────
+
+export function saveTriageLayout(layout: TriageLayout): void {
+  try {
+    localStorage.setItem(TRIAGE_LAYOUT_KEY, layout);
+  } catch {
+    // ignore
+  }
+}
+
+export function loadTriageLayout(): TriageLayout {
+  try {
+    const raw = localStorage.getItem(TRIAGE_LAYOUT_KEY);
+    if (raw === 'list' || raw === 'board') return raw;
+  } catch {
+    // ignore
+  }
+  return 'board';
 }

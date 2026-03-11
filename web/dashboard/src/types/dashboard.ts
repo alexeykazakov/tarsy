@@ -38,3 +38,6 @@ export type DashboardTab = 'sessions' | 'triage';
 export interface TriageFilter {
   assignee: 'all' | 'mine' | 'unassigned';
 }
+
+/** Layout mode for the triage view. */
+export type TriageLayout = 'list' | 'board';

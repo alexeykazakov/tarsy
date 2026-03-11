@@ -259,8 +259,8 @@ class WebSocketService {
       }
     }
 
-    // Route to global `sessions` channel handlers for session-level events
-    if (eventType?.startsWith('session.')) {
+    // Route to global `sessions` channel handlers for session-level and review events
+    if (eventType?.startsWith('session.') || eventType?.startsWith('review.')) {
       const globalChannel = this.channels.get('sessions');
       if (globalChannel) {
         globalChannel.handlers.forEach((h) => h(data));

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Alert,
@@ -7,10 +7,12 @@ import {
 } from '@mui/material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
+import { TriageKanbanBoard } from './TriageKanbanBoard.tsx';
 import { ResolveModal } from './ResolveModal.tsx';
 import { EditNoteModal } from './EditNoteModal.tsx';
+import { saveTriageLayout, loadTriageLayout } from '../../utils/filterPersistence.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
-import type { TriageFilter } from '../../types/dashboard.ts';
+import type { TriageFilter, TriageLayout } from '../../types/dashboard.ts';
 
 interface TriageViewProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
@@ -43,10 +45,20 @@ export function TriageView({
   onPageChange,
   onPageSizeChange,
 }: TriageViewProps) {
+  const [layout, setLayout] = useState<TriageLayout>(() => loadTriageLayout());
   const [resolveSessionId, setResolveSessionId] = useState<string | null>(null);
   const [editNoteState, setEditNoteState] = useState<{ sessionId: string; note: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
+
+  const hoveredSessionIdRef = useRef(hoveredSessionId);
+  hoveredSessionIdRef.current = hoveredSessionId;
+
+  const handleLayoutChange = useCallback((newLayout: TriageLayout) => {
+    setLayout(newLayout);
+    saveTriageLayout(newLayout);
+  }, []);
 
   const withAction = async (fn: () => Promise<void>) => {
     setActionLoading(true);
@@ -94,21 +106,69 @@ export function TriageView({
     withAction(() => onUpdateNote(sessionId, note));
   };
 
+  const handleCardHover = useCallback((sessionId: string | null) => {
+    setHoveredSessionId(sessionId);
+  }, []);
+
+  // Keyboard shortcuts: c=claim, r=resolve, Esc=close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (resolveSessionId !== null) {
+          setResolveSessionId(null);
+          e.preventDefault();
+          return;
+        }
+        if (editNoteState !== null) {
+          setEditNoteState(null);
+          e.preventDefault();
+          return;
+        }
+        return;
+      }
+
+      // Don't handle shortcuts when a modal is open
+      if (resolveSessionId !== null || editNoteState !== null) return;
+
+      const sessionId = hoveredSessionIdRef.current;
+      if (!sessionId) return;
+
+      if (e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        handleClaim(sessionId);
+      } else if (e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        handleResolveClick(sessionId);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [resolveSessionId, editNoteState]);
+
   const hasAnyData = Object.values(groups).some(g => g !== null);
   const emptyGroups: Record<TriageGroupKey, TriageGroup | null> = {
     investigating: null, needs_review: null, in_progress: null, resolved: null,
   };
 
+  const filterBarProps = {
+    filters,
+    onFiltersChange,
+    layout,
+    onLayoutChange: handleLayoutChange,
+    onRefresh,
+    loading,
+  };
+
   if (error) {
     return (
       <Box sx={{ mt: 2 }}>
-        <TriageFilterBar
-          filters={filters}
-          onFiltersChange={onFiltersChange}
-          onRefresh={onRefresh}
-          groups={emptyGroups}
-          loading={loading}
-        />
+        <TriageFilterBar {...filterBarProps} groups={emptyGroups} />
         <Alert severity="error" sx={{ mt: 1 }}>
           {error}
         </Alert>
@@ -119,13 +179,7 @@ export function TriageView({
   if (loading && !hasAnyData) {
     return (
       <Box sx={{ mt: 2 }}>
-        <TriageFilterBar
-          filters={filters}
-          onFiltersChange={onFiltersChange}
-          onRefresh={onRefresh}
-          groups={emptyGroups}
-          loading={loading}
-        />
+        <TriageFilterBar {...filterBarProps} groups={emptyGroups} />
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
@@ -137,25 +191,34 @@ export function TriageView({
 
   return (
     <Box sx={{ mt: 2 }}>
-      <TriageFilterBar
-        filters={filters}
-        onFiltersChange={onFiltersChange}
-        onRefresh={onRefresh}
-        groups={groups}
-        loading={loading}
-      />
+      <TriageFilterBar {...filterBarProps} groups={groups} />
 
-      <TriageGroupedList
-        groups={groups}
-        onClaim={handleClaim}
-        onUnclaim={handleUnclaim}
-        onResolve={handleResolveClick}
-        onReopen={handleReopen}
-        onEditNote={handleEditNote}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-        actionLoading={actionLoading}
-      />
+      {layout === 'list' ? (
+        <TriageGroupedList
+          groups={groups}
+          onClaim={handleClaim}
+          onUnclaim={handleUnclaim}
+          onResolve={handleResolveClick}
+          onReopen={handleReopen}
+          onEditNote={handleEditNote}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          actionLoading={actionLoading}
+        />
+      ) : (
+        <TriageKanbanBoard
+          groups={groups}
+          onClaim={handleClaim}
+          onUnclaim={handleUnclaim}
+          onResolve={handleResolveClick}
+          onReopen={handleReopen}
+          onEditNote={handleEditNote}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          actionLoading={actionLoading}
+          onCardHover={handleCardHover}
+        />
+      )}
 
       <ResolveModal
         open={resolveSessionId !== null}

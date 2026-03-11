@@ -6,13 +6,15 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Refresh } from '@mui/icons-material';
-import type { TriageFilter } from '../../types/dashboard.ts';
+import { Refresh, ViewList, ViewKanban } from '@mui/icons-material';
+import type { TriageFilter, TriageLayout } from '../../types/dashboard.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
 interface TriageFilterBarProps {
   filters: TriageFilter;
   onFiltersChange: (filters: TriageFilter) => void;
+  layout: TriageLayout;
+  onLayoutChange: (layout: TriageLayout) => void;
   onRefresh: () => void;
   groups: Record<TriageGroupKey, TriageGroup | null>;
   loading?: boolean;
@@ -21,6 +23,8 @@ interface TriageFilterBarProps {
 export function TriageFilterBar({
   filters,
   onFiltersChange,
+  layout,
+  onLayoutChange,
   onRefresh,
   groups,
   loading,
@@ -28,6 +32,12 @@ export function TriageFilterBar({
   const handleAssigneeChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
     if (value) {
       onFiltersChange({ ...filters, assignee: value as TriageFilter['assignee'] });
+    }
+  };
+
+  const handleLayoutChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
+    if (value) {
+      onLayoutChange(value as TriageLayout);
     }
   };
 
@@ -68,6 +78,20 @@ export function TriageFilterBar({
           {totalCount} session{totalCount !== 1 ? 's' : ''}
         </Typography>
       )}
+
+      <ToggleButtonGroup
+        value={layout}
+        exclusive
+        onChange={handleLayoutChange}
+        size="small"
+      >
+        <ToggleButton value="list" aria-label="List view">
+          <Tooltip title="List view"><ViewList fontSize="small" /></Tooltip>
+        </ToggleButton>
+        <ToggleButton value="board" aria-label="Board view">
+          <Tooltip title="Board view"><ViewKanban fontSize="small" /></Tooltip>
+        </ToggleButton>
+      </ToggleButtonGroup>
 
       <Tooltip title="Refresh triage data">
         <span>
