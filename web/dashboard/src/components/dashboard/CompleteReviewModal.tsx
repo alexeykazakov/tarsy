@@ -17,7 +17,7 @@ import {
   Divider,
   Alert,
 } from '@mui/material';
-import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { Close, CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown, PersonOutline } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import { QUALITY_RATING } from '../../types/api.ts';
@@ -29,10 +29,11 @@ export interface CompleteReviewModalProps {
   loading?: boolean;
   title?: string;
   executiveSummary?: string | null;
+  assignee?: string | null;
   error?: string | null;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, error }: CompleteReviewModalProps) {
+export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, error }: CompleteReviewModalProps) {
   const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
@@ -56,12 +57,22 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth disableScrollLock>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CheckCircleOutline color="success" />
-          <Typography variant="h6">{title ?? 'Complete Review'}</Typography>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CheckCircleOutline color="success" />
+            <Typography variant="h6">{title ?? 'Complete Review'}</Typography>
+          </Box>
+          {assignee && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, ml: 0.5 }}>
+              <PersonOutline sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                {assignee}
+              </Typography>
+            </Box>
+          )}
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={onClose} size="small" sx={{ mt: 0.5 }}>
           <Close />
         </IconButton>
       </DialogTitle>
