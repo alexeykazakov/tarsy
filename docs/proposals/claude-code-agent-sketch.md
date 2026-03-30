@@ -1,6 +1,6 @@
 # Claude Code Agent — Delegate Tasks to Claude Code
 
-**Status:** Draft — sketch in progress, see [claude-code-agent-questions.md](claude-code-agent-questions.md)
+**Status:** Sketch complete — ready for detailed design
 
 ## Problem
 
@@ -10,7 +10,7 @@ TARSy's current agent execution model is a Go-controlled loop: the `IteratingCon
 - **The agent loop is rigid.** TARSy controls iteration count, tool routing, and conversation flow. The LLM has no autonomy to decide its own workflow — it must respond within TARSy's turn structure.
 - **Complex agentic tasks don't fit.** Some tasks (deep code analysis, multi-file investigation, running test suites, writing remediation scripts) benefit from a fully autonomous agent that can plan, execute, revise, and iterate without external turn management.
 
-Claude Code is Anthropic's agentic coding tool. It runs its own agent loop with built-in tools (file read/write, Bash execution, code search, Git), supports MCP server integration, and can operate non-interactively via the Agent SDK CLI (`claude -p`). It can be containerized for isolation.
+Claude Code is Anthropic's agentic coding tool. It runs its own agent loop with built-in tools (file read/write, Bash execution, code search, Git), supports MCP server integration, and can operate non-interactively via the Agent SDK. It can be containerized for isolation.
 
 ## Goal
 
@@ -53,11 +53,21 @@ Existing agents:                    Claude Code agent:
                                   └──────────────────────┘
 ```
 
-**Deployment model:**
-- **Dev (`make dev`):** Standalone TypeScript service running locally
-- **Containerized (dev & prod):** Sidecar container — isolated from TARSy's container
+### Sidecar service
 
-The sidecar wraps the official `@anthropic-ai/claude-agent-sdk` TypeScript SDK, exposing an HTTP endpoint. TARSy sends an HTTP POST with the prompt and configuration, and reads back an NDJSON stream of events. This aligns with Anthropic's hosting guidance for container-based SDK deployments.
+The sidecar wraps the official `@anthropic-ai/claude-agent-sdk` TypeScript SDK, exposing an HTTP endpoint. TARSy sends an HTTP POST with the prompt and configuration, and reads back an NDJSON stream of events. HTTP + NDJSON is aligned with Anthropic's hosting guidance for container-based SDK deployments.
+
+**Isolation is fundamental**: Claude Code runs in a separate process/container with no access to TARSy's internals. This is the primary reason for the sidecar architecture — not just convenience.
+
+### Deployment model
+
+| Environment | Sidecar | CC Isolation | CC Features |
+|---|---|---|---|
+| **Dev (`make dev`)** | Standalone TypeScript service | Process separation | `settingSources: ["project"]` — skills, CLAUDE.md, rules from local workspace |
+| **Containerized dev** | Sidecar container | Container isolation | `settingSources: ["project"]` — skills, CLAUDE.md, rules baked into image |
+| **Production (Phase 1)** | Ephemeral pod-per-session | Full pod isolation (filesystem, network, resources) | `settingSources: ["project"]` — skills, CLAUDE.md, rules baked into pod image |
+
+**Production model: pod-per-session.** Each CC agent execution gets a dedicated ephemeral pod in OpenShift. Pod is created on demand, destroyed after completion. This provides the safest isolation with no cross-session data leakage. At TARSy's expected load (~10 sessions/day), resource overhead is negligible. Skills, CLAUDE.md, and rules are baked into the pod image for reproducibility.
 
 ### What stays the same
 
@@ -67,88 +77,125 @@ The sidecar wraps the official `@anthropic-ai/claude-agent-sdk` TypeScript SDK, 
 - Timeline events stream to the dashboard via WebSocket
 - The agent is configurable via `tarsy.yaml` like any other agent
 - It can participate in chains (stages, synthesis after parallel agents)
-- It can be dispatched as an orchestrator sub-agent
+- It can be dispatched as an orchestrator sub-agent (architecturally supported, tested post-PoC)
 
 ### What changes
 
 - No `LLMClient` usage — Claude Code calls the Anthropic API directly
 - No `ToolExecutor` usage — Claude Code has its own tools (Bash, Read, Edit, Grep, Glob) and can connect to MCP servers independently
 - The Python LLM Service is bypassed entirely for this agent type
-- A new streaming bridge maps Claude Code's `stream-json` output to TARSy's timeline events
+- A new streaming bridge maps Claude Code's NDJSON output to TARSy timeline events
 
 ## Key Concepts
 
 ### Execution model
 
-The `ClaudeCodeController` spawns Claude Code as an external process:
+The `ClaudeCodeController.Run()` method:
 
 1. Builds the prompt from alert data, previous stage context, and custom instructions
-2. Constructs CLI flags: `--bare`, `--output-format stream-json`, `--allowedTools`, `--mcp-config`, `--append-system-prompt`
-3. Spawns the process (directly or inside a container)
-4. Reads stdout line-by-line (NDJSON stream)
-5. Maps events to TARSy timeline events and publishes them via WebSocket
-6. On process exit, extracts the final result and token usage
+2. Sends an HTTP POST to the sidecar with prompt, configuration, and allowed tools
+3. Reads the NDJSON streaming response
+4. Maps events to TARSy timeline events and publishes them via WebSocket
+5. On stream completion, extracts the final result and token usage
+6. Returns `ExecutionResult` with status, final analysis, and token usage
 
-> **Open question:** subprocess vs container isolation — see [questions document](claude-code-agent-questions.md), Q2.
+### Timeline events
 
-### Event mapping
+A new `claude_code` timeline event type acts as a passthrough for Claude Code's native events. The sidecar streams whatever CC returns, and TARSy persists each event with its native structure. The frontend gets one new React component — a general-purpose Claude Code event renderer.
 
-Claude Code's `stream-json` output produces events that map to TARSy's existing timeline event types:
-
-| Claude Code event | TARSy timeline event | Notes |
-|---|---|---|
-| `text_delta` | `StreamChunkPayload` | Streaming text to dashboard |
-| Tool use (Bash, Read, etc.) | `tool_call` timeline event | Claude Code's built-in tools |
-| Tool result | `tool_result` timeline event | Tool output |
-| `thinking` | `thinking` timeline event | Extended thinking blocks |
-| `result` (final) | `FinalAnalysis` + completion | Session result |
-
-> **Open question:** streaming granularity and dashboard rendering — see [questions document](claude-code-agent-questions.md), Q4.
+This avoids information loss from force-mapping to existing event types and keeps the schema simple (one new type, not one per CC event kind). The renderer can be refined over time as CC-specific rendering needs emerge.
 
 ### Tool access
 
-Claude Code comes with built-in tools: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `WebSearch`, and more. Additionally, it supports MCP servers via `--mcp-config`.
+**PoC:** Claude Code's built-in tools only — Bash, Read, Grep, Glob, etc. kubectl/helm access via environment variables (KUBECONFIG). No MCP bridging.
 
-For TARSy's use case, this means a Claude Code agent could:
-- Run `kubectl` commands directly via Bash (instead of routing through a kubernetes MCP server)
-- Read log files, configuration files, or codebases from a mounted workspace
-- Connect to the same MCP servers other TARSy agents use
-
-> **Open question:** tool access model — see [questions document](claude-code-agent-questions.md), Q3.
+**Post-PoC:** May add MCP server integration (built-in tools + TARSy's MCP servers) when there's a concrete need for structured MCP tool access from within Claude Code. Decision deferred.
 
 ### Authentication
 
-Claude Code requires an `ANTHROPIC_API_KEY` (or Bedrock/Vertex credentials). This is separate from any LLM provider configuration in TARSy's `llm-providers.yaml` — Claude Code manages its own API authentication.
+The sidecar gets credentials via environment variables at deployment time. Supports:
+- **Direct Anthropic:** `ANTHROPIC_API_KEY`
+- **Vertex AI:** `CLAUDE_CODE_USE_VERTEX=1` + GCP credentials
+- **Bedrock:** `CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials
 
-> **Open question:** how to manage the Anthropic API key — see [questions document](claude-code-agent-questions.md), Q5.
+All CC agents in a deployment use the same auth backend. Per-request provider selection can be added post-PoC if needed.
 
 ### Cost and budget control
 
 Claude Code can autonomously make many LLM calls. Cost control mechanisms:
-- `--max-turns` CLI flag limits the number of agent loop cycles
-- `--max-tokens` limits per-call output
-- Context timeout from TARSy's session/execution timeout
-- The final `result` JSON includes `total_cost_usd` and token usage for tracking
+- `maxTurns` option limits the number of agent loop cycles
+- Context timeout from TARSy's session/execution timeout (kills the HTTP request)
+- The final result includes `total_cost_usd` and token usage for tracking and DB storage
+
+### CC features via `settingSources`
+
+The sidecar uses the SDK's `settingSources: ["project"]` to load Claude Code features from the workspace's `.claude/` directory. This replaces the CLI's `--bare` flag with a more granular, SDK-native mechanism.
+
+**Loaded from workspace (all phases including PoC):**
+- `.claude/skills/*/SKILL.md` — SRE investigation skills, kubectl patterns, runbook skills
+- `CLAUDE.md` — project instructions, environment details, conventions
+- `.claude/rules/*.md` — always-on behavioral rules
+- `.claude/settings.json` — filesystem hooks, tool configuration
+
+**Not loaded (by design):**
+- Auto-memory — CLI-only feature, SDK never loads it regardless of `settingSources`
+- User-level settings (`~/.claude/`) — not meaningful in containers
+
+**Workspace provisioning:**
+- **Dev:** Workspace directory checked into repo (e.g., `deploy/claude-code/workspace/.claude/`)
+- **Containerized/prod:** Baked into container image or mounted via ConfigMap
+
+TARSy's own memory system (PostgreSQL-backed, semantic search, Tier 4 prompt injection) provides cross-session learning. CC auto-memory is irrelevant for the SDK approach.
 
 ### Configuration
-
-A Claude Code agent would be configured in `tarsy.yaml` like any other agent, with claude-code-specific fields:
 
 ```yaml
 agents:
   ClaudeCodeInvestigator:
     type: claude_code
     description: >
-      Investigates incidents using Claude Code with full shell access,
-      file system tools, and MCP server integration.
+      Investigates incidents using Claude Code with full shell access
+      and file system tools.
     custom_instructions: |
       You are an SRE investigating a Kubernetes incident.
-      Use kubectl, log files, and available MCP tools to investigate.
+      Use kubectl, log files, and available CLI tools to investigate.
     claude_code:
       max_turns: 30
-      allowed_tools: ["Bash", "Read", "Grep", "Glob"]
-      mcp_config: "/etc/tarsy/claude-mcp.json"
+      allowed_tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
+      setting_sources: ["project"]
+      workspace_dir: "deploy/claude-code/workspace"
 ```
+
+## Implementation Phases
+
+### Phase 0: PoC
+
+- New `AgentTypeClaudeCode` + `ClaudeCodeController`
+- TypeScript sidecar wrapping `@anthropic-ai/claude-agent-sdk` with HTTP + NDJSON endpoint
+- Single sidecar instance (standalone service via `make dev`)
+- `settingSources: ["project"]` — skills, CLAUDE.md, rules loaded from workspace
+- Workspace directory with `.claude/skills/`, `CLAUDE.md`, rules checked into repo
+- Built-in tools only (Bash, Read, Grep, Glob, Skill) — no MCP
+- New `claude_code` timeline event type with passthrough rendering
+- Static credentials via environment variables
+- Basic dashboard component for CC events
+
+### Phase 1: Production-ready
+
+- Pod-per-session deployment in OpenShift
+- Container image with CC SDK sidecar + workspace (skills, CLAUDE.md, rules baked in)
+- Kubernetes API integration for pod lifecycle management
+- Cost tracking and token usage in DB
+- Timeout and cancellation via HTTP request termination + pod cleanup
+
+### Future considerations (deferred)
+
+- MCP server integration (built-in tools + TARSy's MCP servers)
+- Orchestrator sub-agent validation
+- Per-request provider selection (mixed Anthropic/Vertex deployments)
+- CC auto-memory (CLI-only feature — would require different integration approach if ever needed)
+- `settingSources: ["user"]` for user-level skills (not meaningful in containers currently)
+- Dedicated dashboard components for CC-specific event rendering
 
 ## Use Cases
 
@@ -162,13 +209,13 @@ The orchestrator dispatches a Claude Code agent for tasks that benefit from auto
 
 ### Future: Remediation with code generation
 
-Action stages where Claude Code writes and applies remediation scripts, Kubernetes manifests, or configuration changes — with container isolation for safety.
+Action stages where Claude Code writes and applies remediation scripts, Kubernetes manifests, or configuration changes — with pod isolation for safety.
 
 ## What Is Out of Scope
 
 - **Replacing existing agents** — Claude Code is an additional agent type, not a replacement for existing investigation/synthesis/scoring agents
-- **Interactive Claude Code sessions** — only headless/programmatic execution via `-p` flag
+- **Interactive Claude Code sessions** — only headless/programmatic execution via the Agent SDK
 - **Claude Code on the web** (Anthropic's hosted version) — TARSy runs its own Claude Code instances
 - **Multi-model routing within Claude Code** — Claude Code uses Anthropic models only; TARSy's multi-provider system handles other models via existing agent types
 - **Custom tool development for Claude Code** — using Claude Code's built-in tools and standard MCP, not building custom SDK tools
-- **Dashboard redesign** — initial version maps Claude Code events to existing timeline event types; dedicated UI components can follow later
+- **CC auto-memory persistence** — CLI-only feature not available in SDK; TARSy's own memory system provides cross-session learning

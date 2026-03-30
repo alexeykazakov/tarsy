@@ -1,6 +1,6 @@
 # Claude Code Agent — Sketch Questions
 
-**Status:** Open — decisions pending  
+**Status:** All questions resolved  
 **Related:** [Sketch document](claude-code-agent-sketch.md)
 
 Each question has options with trade-offs and a recommendation. Go through them one by one to form the sketch, then update the sketch document.
@@ -137,33 +137,63 @@ _Considered and rejected: Option B — restrict to standalone stage only (artifi
 
 ## Q7: What workspace does Claude Code operate in?
 
-Claude Code operates within a working directory — it can read files, run commands, and navigate the filesystem relative to this directory. For TARSy's SRE use case, the question is what that workspace contains.
+Claude Code operates within a working directory — it can read files, run commands, and navigate the filesystem relative to this directory. For TARSy's SRE use case, the question is what that workspace contains and how the production deployment model affects isolation and memory.
 
-### Option A: Empty workspace with environment access
+### Configured workspace with `settingSources: ["project"]` (chosen)
 
-Claude Code starts in an empty/minimal workspace. All investigation happens through CLI tools (kubectl, curl, etc.) and environment variables (KUBECONFIG, cloud credentials).
+The sidecar uses the SDK's `settingSources` mechanism (not the CLI's `--bare` flag) to control what features are loaded. With `settingSources: ["project"]`, the SDK auto-discovers skills, CLAUDE.md, rules, and hooks from the workspace's `.claude/` directory — the same files used by interactive Claude Code sessions.
 
-- **Pro:** Minimal setup — no workspace provisioning needed
-- **Pro:** Mirrors how SRE engineers work — they SSH into a machine and use CLI tools
-- **Con:** Claude Code can't read runbooks, config files, or previous investigation artifacts unless they're piped in via the prompt
+**Key insight:** `--bare` is a CLI concept. The SDK has a different, more granular mechanism. By default, the SDK loads nothing (equivalent to `--bare`). You opt into features explicitly via `settingSources`:
 
-### Option B: Provisioned workspace with mounted content
+| `settingSources` value | What it loads |
+|---|---|
+| `"project"` | `.claude/skills/`, `CLAUDE.md`, `.claude/rules/*.md`, project hooks, `settings.json` — all relative to `cwd` |
+| `"user"` | `~/.claude/skills/`, `~/.claude/CLAUDE.md`, user settings |
+| `"local"` | `CLAUDE.local.md`, `.claude/settings.local.json` |
 
-Create a temporary workspace directory with relevant files: runbook content, alert data, previous stage analysis, relevant configuration files. Mount it (or create it) before spawning Claude Code.
+**What this enables from PoC:**
+- **Skills:** `.claude/skills/*/SKILL.md` files — SRE investigation skills, kubectl patterns, runbook skills
+- **CLAUDE.md:** Project instructions, coding conventions, environment details
+- **Rules:** `.claude/rules/*.md` — always-on behavioral rules
+- **Hooks:** Filesystem hooks from `.claude/settings.json` + programmatic hooks in the sidecar
+- **Skill tool:** Add `"Skill"` to `allowedTools` for on-demand skill loading
 
-- **Pro:** Claude Code can reference files during investigation (runbooks, configs, previous analysis)
-- **Pro:** In container mode, the mount defines the filesystem boundary
-- **Con:** Requires workspace provisioning logic (create temp dir, write files, clean up)
-- **Con:** Deciding what to include in the workspace adds complexity
+**What's NOT available (by design):**
+- **Auto-memory is CLI-only** — the SDK never loads `~/.claude/projects/*/memory/` regardless of `settingSources`. This is a non-issue: no need to suppress it.
 
-### Option C: Shared persistent workspace per session
+**Workspace provisioning:**
+- **Dev (`make dev`):** Workspace directory with `.claude/skills/`, `CLAUDE.md`, and rules checked into the repo (e.g., `deploy/claude-code/workspace/`)
+- **Containerized:** Baked into the sidecar container image or mounted via ConfigMap/volume
+- **Pod-per-session:** Same — skills and config baked into the pod image
 
-All agents in a session share a workspace directory. Files created by one agent are accessible to the next stage.
+### Production deployment: Pod-per-session (chosen for Phase 1)
 
-- **Pro:** Enables multi-stage workflows where Claude Code builds on previous work
-- **Pro:** Natural for investigation → remediation pipelines (investigation writes notes, action reads them)
-- **Con:** State management across stages adds complexity
-- **Con:** Cleanup must be handled carefully
-- **Con:** Only relevant if multiple Claude Code agents run in the same session
+Each CC agent execution gets a dedicated ephemeral pod in OpenShift. Pod is created on demand, destroyed after completion. `settingSources: ["project"]` loads skills and config from the workspace baked into the image.
 
-**Recommendation:** Option B. A provisioned temporary workspace with alert data and runbook content gives Claude Code useful context without complexity. The workspace is created before the controller spawns Claude Code and cleaned up after. In container mode, this directory becomes the mount point — a natural boundary.
+- **Pro:** Safest isolation — each session gets its own filesystem, network namespace, resource limits
+- **Pro:** No cross-session data leakage
+- **Pro:** Straightforward in OpenShift — TARSy creates pods via Kubernetes API
+- **Pro:** Skills, CLAUDE.md, and rules are baked into the image — reproducible and version-controlled
+- **Pro:** Auto-memory is a non-issue (SDK never loads it)
+- **Con:** Pod startup latency (mitigated with pre-pulled images)
+- **Con:** Resource overhead (~1 GiB RAM, 5 GiB disk per Anthropic's recommendation)
+
+### CC auto-memory assessment
+
+Claude Code has two memory systems: CLAUDE.md (you write, static instructions) and auto-memory (CC writes, learns from sessions).
+
+**Auto-memory is irrelevant for the SDK approach:** The SDK never loads auto-memory regardless of `settingSources`. It's a CLI-only feature. No flags or config needed to prevent it.
+
+**CLAUDE.md is fully supported:** With `settingSources: ["project"]`, the SDK loads `CLAUDE.md` from the workspace's root and `.claude/` directory at session start. No need for `--append-system-prompt` workarounds.
+
+**TARSy's memory system covers cross-session learning:**
+- TARSy's own memory (PostgreSQL-backed, semantic search, Tier 4 prompt injection) captures high-value investigation learnings across all agent types
+- CC auto-memory would capture narrower operational knowledge with significant overlap
+- At ~10 sessions/day, CC auto-memory accumulation would be slow and marginally useful
+
+**Decision:**
+- **PoC:** Configured workspace with `settingSources: ["project"]`, single sidecar. Skills, CLAUDE.md, and rules loaded from `.claude/` directory. Investigation data in prompt. CLI tools via env vars.
+- **Production Phase 1:** Pod-per-session ephemeral. Same `settingSources: ["project"]` with skills/config baked into the pod image. TARSy's own memory system provides cross-session learning.
+- **Future consideration:** If CC auto-memory proves uniquely valuable (tool-usage patterns TARSy's memory doesn't capture), it's a CLI-only feature and would require a fundamentally different integration approach. Deferred.
+
+_Considered and rejected: `--bare` mode / no `settingSources` (blocks skills and CLAUDE.md — too restrictive), `settingSources: ["user"]` (user-level config doesn't apply in containers), shared persistent workspace (state management complexity, only relevant for multi-CC-agent sessions)._
