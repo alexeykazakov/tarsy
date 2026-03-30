@@ -98,37 +98,22 @@ _Considered and rejected: Option A — map to existing types (lossy, Bash-as-MCP
 
 ---
 
-## Q5: How is the Anthropic API key managed?
+## Q5: How are Claude Code credentials managed?
 
-Claude Code requires an `ANTHROPIC_API_KEY` environment variable. TARSy's existing LLM providers use `api_key_env` in `llm-providers.yaml` to reference environment variables. The question is how the Claude Code agent gets its API key.
+Claude Code supports multiple auth backends: direct Anthropic (`ANTHROPIC_API_KEY`), Vertex AI (`CLAUDE_CODE_USE_VERTEX=1` + GCP credentials), and Bedrock (`CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials). TARSy already uses Vertex AI for Claude models (`vertexai-claude-sonnet` in config). The question is how the sidecar gets its credentials.
 
-### Option A: Dedicated environment variable
+### Option A: Static sidecar credentials (chosen)
 
-Claude Code reads `ANTHROPIC_API_KEY` from the environment (its default behavior). TARSy passes it through when spawning the process.
+The sidecar container gets credentials via environment variables at deployment time. All Claude Code agents in a deployment use the same auth backend.
 
-- **Pro:** Standard Claude Code behavior — no custom configuration
-- **Pro:** Works with `--bare` mode out of the box
-- **Con:** Separate from TARSy's LLM provider configuration
-- **Con:** If TARSy already has an Anthropic provider in `llm-providers.yaml`, the key is duplicated
+- **Pro:** Simplest — standard container env var configuration
+- **Pro:** Matches how the Python LLM service gets its own provider keys
+- **Pro:** Supports all backends: `ANTHROPIC_API_KEY` for direct, `CLAUDE_CODE_USE_VERTEX=1` + GCP creds for Vertex, `CLAUDE_CODE_USE_BEDROCK=1` + AWS creds for Bedrock
+- **Con:** Can't mix direct-Anthropic and Vertex agents in the same deployment
 
-### Option B: Reference existing provider config
+**Decision:** Option A — static credentials on the sidecar via environment variables. The sidecar is configured with one auth backend per deployment (direct Anthropic or Vertex AI). Per-request provider selection (Option B) can be added post-PoC if mixed-provider deployments are needed.
 
-The `claude_code` agent config references an existing Anthropic LLM provider by name. The controller extracts the API key env var from the provider config and passes it to the Claude Code process.
-
-- **Pro:** Single source of truth — reuses `llm-providers.yaml` configuration
-- **Pro:** Consistent with how other agents resolve their LLM credentials
-- **Con:** Adds coupling between the Claude Code agent config and the LLM provider registry
-- **Con:** Claude Code may need additional env vars (for Bedrock/Vertex) that don't fit the existing provider schema
-
-### Option C: Claude Code-specific config block
-
-Add a `claude_code` section to the agent config (or top-level config) with its own `api_key_env` field.
-
-- **Pro:** Self-contained — all Claude Code config in one place
-- **Pro:** Can accommodate Claude Code-specific settings (model override, API base URL, Bedrock/Vertex credentials)
-- **Con:** Yet another place to configure API keys
-
-**Recommendation:** Option A for simplicity. Claude Code's `ANTHROPIC_API_KEY` is a standard convention. The TARSy process already has access to environment variables, and the controller simply passes them through. If more sophisticated key management is needed (e.g., per-agent keys, Vertex credentials), Option C can be added later.
+_Considered and rejected for PoC: Option B — per-request provider selection (adds protocol complexity, no PoC need), Option C — config block in tarsy.yaml (unnecessary indirection when env vars suffice)._
 
 ---
 
@@ -136,26 +121,17 @@ Add a `claude_code` section to the agent config (or top-level config) with its o
 
 The existing orchestrator dispatches sub-agents via `SubAgentRunner.Dispatch()`, which creates an `AgentExecution` record, resolves config, and runs the agent in a goroutine. The question is whether a Claude Code agent can participate in this system.
 
-### Option A: Yes — works via existing `AgentFactory`
+### Option A: Yes — works via existing `AgentFactory` (chosen)
 
-The orchestrator dispatches a Claude Code agent the same way it dispatches any other sub-agent. `AgentFactory.CreateAgent()` creates a `BaseAgent` wrapping a `ClaudeCodeController`. The sub-agent goroutine runs the controller, which spawns the Claude Code process.
+The orchestrator dispatches a Claude Code agent the same way it dispatches any other sub-agent. `AgentFactory.CreateAgent()` creates a `BaseAgent` wrapping a `ClaudeCodeController`. The controller calls the sidecar over HTTP. Results flow back through the same `SubAgentResult` channel.
 
 - **Pro:** Zero changes to the orchestrator — it already works with any `Agent` implementation
 - **Pro:** The Claude Code sub-agent gets full lifecycle management (timeout, cancellation, status tracking)
 - **Pro:** Results flow back through the same `SubAgentResult` channel
-- **Con:** A Claude Code subprocess inside a sub-agent goroutine adds resource complexity (a goroutine managing an external process)
-- **Con:** Container-isolated Claude Code as a sub-agent means the orchestrator needs Docker access
 
-### Option B: No — Claude Code only as a standalone stage agent
+**Decision:** Option A — architecturally supported by design (same `Agent` interface). PoC scope is standalone stage execution only; orchestrator sub-agent integration is validated post-PoC.
 
-Restrict Claude Code agents to top-level stage execution. Not available for orchestrator dispatch.
-
-- **Pro:** Simpler resource management
-- **Pro:** Avoids nested container complexity
-- **Con:** Limits the orchestrator's ability to leverage Claude Code for specific tasks
-- **Con:** Artificial restriction that doesn't reflect a technical limitation
-
-**Recommendation:** Option A. The agent framework's design already supports this — `BaseAgent` wraps any `Controller`, and the orchestrator dispatches any `Agent`. The resource complexity (goroutine + external process) is manageable and no different from how MCP stdio servers already spawn subprocesses. Container support adds a consideration but doesn't block the basic path.
+_Considered and rejected: Option B — restrict to standalone stage only (artificial limitation with no technical basis)._
 
 ---
 
