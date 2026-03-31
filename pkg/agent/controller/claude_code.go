@@ -62,6 +62,7 @@ type SidecarRequest struct {
 type sidecarEvent struct {
 	Type    string `json:"type"`
 	Subtype string `json:"subtype,omitempty"`
+	Summary string `json:"summary,omitempty"` // tool_use_summary events
 
 	Result       string          `json:"result,omitempty"`
 	IsError      bool            `json:"is_error,omitempty"`
@@ -230,7 +231,7 @@ func (c *ClaudeCodeController) streamSession(
 			totalUsage.TotalTokens += event.Usage.InputTokens + event.Usage.OutputTokens
 		}
 
-		delta := formatEventText(&event)
+		delta := formatEventChunk(&event)
 		if delta == "" {
 			continue
 		}
@@ -338,49 +339,74 @@ func (c *ClaudeCodeController) resultMeta(result *agent.ExecutionResult) map[str
 }
 
 // ---------------------------------------------------------------------------
-// Text formatting — renders SDK events as terminal-like output
+// Chunk formatting — renders SDK events as typed JSON lines (NDJSON)
 // ---------------------------------------------------------------------------
 
-func formatEventText(event *sidecarEvent) string {
+// ccChunk is a compact, typed event for the frontend to render.
+type ccChunk struct {
+	Type    string `json:"t"`
+	Content string `json:"c,omitempty"`
+	Name    string `json:"n,omitempty"`
+	Input   string `json:"in,omitempty"`
+}
+
+func formatEventChunk(event *sidecarEvent) string {
 	switch event.Type {
 	case "assistant":
-		return formatAssistant(event.Raw)
+		return formatAssistantChunks(event.Raw)
 	case "user":
-		return formatUser(event.Raw)
+		return formatUserChunks(event.Raw)
 	case "system":
+		if event.Subtype == "init" {
+			return formatSystemInitChunk(event.Raw)
+		}
 		return ""
+	case "tool_use_summary":
+		if event.Summary == "" {
+			return ""
+		}
+		return marshalChunk(ccChunk{Type: "summary", Content: event.Summary})
 	default:
 		return ""
 	}
 }
 
-func formatAssistant(raw json.RawMessage) string {
+func marshalChunk(chunk ccChunk) string {
+	b, err := json.Marshal(chunk)
+	if err != nil {
+		return ""
+	}
+	return string(b) + "\n"
+}
+
+func formatAssistantChunks(raw json.RawMessage) string {
 	blocks := parseContentBlocks(raw)
 	if len(blocks) == 0 {
 		return ""
 	}
-
 	var sb strings.Builder
 	for _, b := range blocks {
 		switch b.Type {
 		case "text":
 			if b.Text != "" {
-				sb.WriteString(b.Text)
-				sb.WriteString("\n\n")
+				sb.WriteString(marshalChunk(ccChunk{Type: "text", Content: b.Text}))
 			}
 		case "tool_use":
-			sb.WriteString(fmtToolCall(b.Name, b.Input))
+			sb.WriteString(marshalChunk(ccChunk{
+				Type:  "tool",
+				Name:  b.Name,
+				Input: summarizeToolInput(b.Input),
+			}))
 		}
 	}
 	return sb.String()
 }
 
-func formatUser(raw json.RawMessage) string {
+func formatUserChunks(raw json.RawMessage) string {
 	blocks := parseContentBlocks(raw)
 	if len(blocks) == 0 {
 		return ""
 	}
-
 	var sb strings.Builder
 	for _, b := range blocks {
 		if b.Type != "tool_result" {
@@ -391,13 +417,51 @@ func formatUser(raw json.RawMessage) string {
 			continue
 		}
 		if len(text) > maxToolOutput {
-			text = text[:maxToolOutput] + "\n…(truncated)"
+			text = text[:maxToolOutput] + "\n...(truncated)"
 		}
-		sb.WriteString(text)
-		sb.WriteString("\n\n")
+		sb.WriteString(marshalChunk(ccChunk{Type: "result", Content: text}))
 	}
 	return sb.String()
 }
+
+func formatSystemInitChunk(raw json.RawMessage) string {
+	var init struct {
+		Model             string `json:"model"`
+		ClaudeCodeVersion string `json:"claude_code_version"`
+	}
+	if err := json.Unmarshal(raw, &init); err != nil || init.Model == "" {
+		return ""
+	}
+	content := "model: " + init.Model
+	if init.ClaudeCodeVersion != "" {
+		content += ", CC v" + init.ClaudeCodeVersion
+	}
+	return marshalChunk(ccChunk{Type: "system", Content: content})
+}
+
+func summarizeToolInput(input json.RawMessage) string {
+	if len(input) == 0 {
+		return ""
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(input, &m); err != nil {
+		return ""
+	}
+	for _, key := range []string{"command", "file_path", "pattern", "query", "url"} {
+		if v, ok := m[key].(string); ok {
+			return v
+		}
+	}
+	s := string(input)
+	if len(s) > 200 {
+		s = s[:200] + "..."
+	}
+	return s
+}
+
+// ---------------------------------------------------------------------------
+// SDK message parsing helpers
+// ---------------------------------------------------------------------------
 
 type contentBlock struct {
 	Type    string          `json:"type"`
@@ -417,39 +481,6 @@ func parseContentBlocks(raw json.RawMessage) []contentBlock {
 		return nil
 	}
 	return msg.Message.Content
-}
-
-func fmtToolCall(name string, input json.RawMessage) string {
-	var sb strings.Builder
-	sb.WriteString("❯ ")
-	sb.WriteString(name)
-
-	if len(input) > 0 {
-		var m map[string]interface{}
-		if err := json.Unmarshal(input, &m); err == nil {
-			if cmd, ok := m["command"].(string); ok {
-				sb.WriteString(": ")
-				sb.WriteString(cmd)
-				sb.WriteString("\n")
-				return sb.String()
-			}
-			if fp, ok := m["file_path"].(string); ok {
-				sb.WriteString(": ")
-				sb.WriteString(fp)
-				sb.WriteString("\n")
-				return sb.String()
-			}
-			if p, ok := m["pattern"].(string); ok {
-				sb.WriteString(": ")
-				sb.WriteString(p)
-				sb.WriteString("\n")
-				return sb.String()
-			}
-		}
-	}
-
-	sb.WriteString("\n")
-	return sb.String()
 }
 
 func extractToolResultText(content json.RawMessage) string {

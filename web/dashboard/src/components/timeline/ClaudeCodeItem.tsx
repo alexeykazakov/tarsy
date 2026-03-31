@@ -2,6 +2,7 @@ import { useState, useEffect, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, Chip, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, SmartToyOutlined } from '@mui/icons-material';
 import CopyButton from '../shared/CopyButton';
+import ClaudeCodeSession from './ClaudeCodeSession';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ClaudeCodeItemProps {
@@ -68,21 +69,10 @@ function ClaudeCodeItem({ item, expandAll = false }: ClaudeCodeItemProps) {
         </IconButton>
       </Box>
 
-      {/* Terminal content */}
+      {/* Session content */}
       <Collapse in={isExpanded}>
-        <Box
-          sx={(theme) => ({
-            mx: 1.5, mb: 1.5,
-            maxHeight: 600, overflow: 'auto',
-            p: 1.5, borderRadius: 1,
-            fontFamily: 'monospace', fontSize: '0.82rem', lineHeight: 1.6,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'grey.900',
-            color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.100',
-            border: `1px solid ${theme.palette.divider}`,
-          })}
-        >
-          {content || '(no output)'}
+        <Box sx={{ mx: 1.5, mb: 1.5, maxHeight: 600, overflow: 'auto', p: 1.5 }}>
+          <ClaudeCodeSession content={content} />
         </Box>
       </Collapse>
     </Box>

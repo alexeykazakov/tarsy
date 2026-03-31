@@ -3,6 +3,7 @@ import { Box, Typography, alpha } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
+import ClaudeCodeSession from '../timeline/ClaudeCodeSession';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { getFinalAnalysisPresentation } from '../timeline/ResponseItem';
@@ -166,7 +167,7 @@ const StreamingToolContent = memo(({ content }: { content: string }) => {
 StreamingToolContent.displayName = 'StreamingToolContent';
 
 // --- ClaudeCodeBlock ---
-// Renders a streaming Claude Code session as a terminal view with auto-scroll.
+// Renders a streaming Claude Code session with structured rendering and auto-scroll.
 
 const ClaudeCodeBlock = memo(({ content }: { content: string }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -204,17 +205,9 @@ const ClaudeCodeBlock = memo(({ content }: { content: string }) => {
       </Box>
       <Box
         ref={scrollRef}
-        sx={(theme) => ({
-          ml: 4, maxHeight: 500, overflow: 'auto',
-          p: 1.5, borderRadius: 1,
-          fontFamily: 'monospace', fontSize: '0.82rem', lineHeight: 1.6,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'grey.900',
-          color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.100',
-          border: `1px solid ${theme.palette.divider}`,
-        })}
+        sx={{ ml: 4, maxHeight: 500, overflow: 'auto', p: 1.5 }}
       >
-        {content || 'Starting session...'}
+        <ClaudeCodeSession content={content || ''} streaming />
       </Box>
     </Box>
   );

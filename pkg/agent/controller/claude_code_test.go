@@ -130,10 +130,14 @@ func TestClaudeCodeController_SuccessfulExecution(t *testing.T) {
 	assert.Equal(t, 1, ccEvents, "expected exactly 1 claude_code session event")
 	assert.Equal(t, 1, faEvents, "expected 1 final_analysis event")
 
-	// The session content should contain the assistant text and tool call.
-	assert.Contains(t, ccContent, "Investigating the alert...")
-	assert.Contains(t, ccContent, "❯ Bash: kubectl get pods")
-	assert.Contains(t, ccContent, "pod-xyz")
+	// The session content is NDJSON chunks; verify key chunks are present.
+	assert.Contains(t, ccContent, `"t":"text"`)
+	assert.Contains(t, ccContent, `Investigating the alert...`)
+	assert.Contains(t, ccContent, `"t":"tool"`)
+	assert.Contains(t, ccContent, `"n":"Bash"`)
+	assert.Contains(t, ccContent, `kubectl get pods`)
+	assert.Contains(t, ccContent, `"t":"result"`)
+	assert.Contains(t, ccContent, `pod-xyz`)
 }
 
 func TestClaudeCodeController_ErrorResult(t *testing.T) {
@@ -301,7 +305,7 @@ func TestClaudeCodeController_PrevStageContext(t *testing.T) {
 	assert.Contains(t, capturedReq.Prompt, "Previous findings: pod OOMKilled")
 }
 
-func TestFormatEventText(t *testing.T) {
+func TestFormatEventChunk(t *testing.T) {
 	tests := []struct {
 		name     string
 		event    sidecarEvent
@@ -309,9 +313,18 @@ func TestFormatEventText(t *testing.T) {
 		empty    bool
 	}{
 		{
-			name:  "system events produce no output",
-			event: sidecarEvent{Type: "system", Subtype: "init"},
+			name:  "system init without model produces no output",
+			event: sidecarEvent{Type: "system", Subtype: "init", Raw: json.RawMessage(`{}`)},
 			empty: true,
+		},
+		{
+			name: "system init with model",
+			event: sidecarEvent{
+				Type:    "system",
+				Subtype: "init",
+				Raw:     json.RawMessage(`{"model":"claude-sonnet-4-20250514","claude_code_version":"1.0.18"}`),
+			},
+			contains: []string{`"t":"system"`, `claude-sonnet-4-20250514`, `CC v1.0.18`},
 		},
 		{
 			name: "assistant text",
@@ -319,7 +332,7 @@ func TestFormatEventText(t *testing.T) {
 				Type: "assistant",
 				Raw:  json.RawMessage(`{"message":{"content":[{"type":"text","text":"Hello world"}]}}`),
 			},
-			contains: []string{"Hello world"},
+			contains: []string{`"t":"text"`, `Hello world`},
 		},
 		{
 			name: "assistant tool_use with command",
@@ -327,7 +340,7 @@ func TestFormatEventText(t *testing.T) {
 				Type: "assistant",
 				Raw:  json.RawMessage(`{"message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls -la"}}]}}`),
 			},
-			contains: []string{"❯ Bash: ls -la"},
+			contains: []string{`"t":"tool"`, `"n":"Bash"`, `"in":"ls -la"`},
 		},
 		{
 			name: "user tool_result",
@@ -335,7 +348,15 @@ func TestFormatEventText(t *testing.T) {
 				Type: "user",
 				Raw:  json.RawMessage(`{"message":{"content":[{"type":"tool_result","content":"file1.txt\nfile2.txt"}]}}`),
 			},
-			contains: []string{"file1.txt", "file2.txt"},
+			contains: []string{`"t":"result"`, `file1.txt`, `file2.txt`},
+		},
+		{
+			name: "tool_use_summary",
+			event: sidecarEvent{
+				Type:    "tool_use_summary",
+				Summary: "Read 3 files, ran 2 commands",
+			},
+			contains: []string{`"t":"summary"`, `Read 3 files`},
 		},
 		{
 			name: "assistant empty content",
@@ -349,7 +370,7 @@ func TestFormatEventText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatEventText(&tt.event)
+			result := formatEventChunk(&tt.event)
 			if tt.empty {
 				assert.Empty(t, result)
 				return

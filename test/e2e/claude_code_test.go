@@ -133,9 +133,12 @@ func TestE2E_ClaudeCodeAgent(t *testing.T) {
 	assert.Equal(t, 1, ccCount, "expected exactly 1 claude_code session event")
 	assert.Equal(t, 1, faCount, "expected 1 final_analysis event")
 
-	// The single session event should contain the full conversation.
+	// The single session event contains NDJSON chunks with the conversation.
+	assert.Contains(t, ccContent, `"t":"text"`)
 	assert.Contains(t, ccContent, "Investigating pod status...")
-	assert.Contains(t, ccContent, "❯ Bash: kubectl get pods -n production")
+	assert.Contains(t, ccContent, `"t":"tool"`)
+	assert.Contains(t, ccContent, `"n":"Bash"`)
+	assert.Contains(t, ccContent, "kubectl get pods -n production")
 	assert.Contains(t, ccContent, "OOMKilled")
 	assert.Contains(t, ccContent, "Found root cause")
 
