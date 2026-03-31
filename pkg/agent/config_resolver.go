@@ -130,6 +130,7 @@ func ResolveAgentConfig(
 		StallTimeout:              DefaultStallTimeout,
 		RequiredSkillContent:      requiredSkills,
 		OnDemandSkills:            onDemandSkills,
+		ClaudeCode:                agentDef.ClaudeCode,
 	}, nil
 }
 

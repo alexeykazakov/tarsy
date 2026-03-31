@@ -47,6 +47,10 @@ type AgentConfig struct {
 	// Validated against the skill registry only (no dependency on Skills allowlist).
 	// These are excluded from the on-demand catalog.
 	RequiredSkills []string `yaml:"required_skills,omitempty"`
+
+	// ClaudeCode holds configuration for claude_code agent type.
+	// Only valid when Type == AgentTypeClaudeCode.
+	ClaudeCode *ClaudeCodeConfig `yaml:"claude_code,omitempty"`
 }
 
 // OrchestratorConfig holds orchestrator-specific settings.
@@ -55,6 +59,15 @@ type OrchestratorConfig struct {
 	MaxConcurrentAgents *int           `yaml:"max_concurrent_agents,omitempty"`
 	AgentTimeout        *time.Duration `yaml:"agent_timeout,omitempty"`
 	MaxBudget           *time.Duration `yaml:"max_budget,omitempty"`
+}
+
+// ClaudeCodeConfig holds settings specific to the Claude Code agent type.
+// These are passed to the CC sidecar service.
+type ClaudeCodeConfig struct {
+	MaxTurns       *int     `yaml:"max_turns,omitempty" validate:"omitempty,min=1"`
+	AllowedTools   []string `yaml:"allowed_tools,omitempty"`
+	SettingSources []string `yaml:"setting_sources,omitempty"`
+	WorkspaceDir   string   `yaml:"workspace_dir,omitempty"`
 }
 
 // AgentRegistry stores agent configurations in memory with thread-safe access

@@ -1,0 +1,29 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+
+mcp_servers:
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  ClaudeCodeInvestigator:
+    type: claude_code
+    description: Investigates incidents using Claude Code
+    custom_instructions: |
+      You are an SRE investigating a Kubernetes incident.
+    claude_code:
+      max_turns: 10
+      allowed_tools: ["Bash", "Read"]
+      setting_sources: ["project"]
+      workspace_dir: "/tmp/cc-test-workspace"
+
+agent_chains:
+  cc-chain:
+    alert_types: [cc-test-alert]
+    stages:
+      - name: investigation
+        agents:
+          - name: ClaudeCodeInvestigator

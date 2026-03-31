@@ -10,6 +10,7 @@ import ErrorItem from './ErrorItem';
 import ProviderFallbackItem from './ProviderFallbackItem';
 import SkillLoadedItem from './SkillLoadedItem';
 import MemoryInjectedItem from './MemoryInjectedItem';
+import ClaudeCodeItem from './ClaudeCodeItem';
 
 interface TimelineItemProps {
   item: FlowItem;
@@ -118,6 +119,9 @@ function TimelineItem({
 
     case FLOW_ITEM.MEMORY_INJECTED:
       return <MemoryInjectedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
+
+    case FLOW_ITEM.CLAUDE_CODE:
+      return <ClaudeCodeItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container

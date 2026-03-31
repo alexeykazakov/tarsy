@@ -28,3 +28,21 @@ defaults:
   # make sure scoring is also enabled, otherwise no new memories will be created.
   memory:
     enabled: false
+
+# --- Claude Code Agent (optional) ---
+# Uncomment and add a chain to use the Claude Code agent.
+# Requires the CC sidecar: cd services/claude-code-sidecar && npm run dev
+# Also requires ANTHROPIC_API_KEY in .env (or Vertex AI credentials).
+#
+# agents:
+#   ClaudeCodeInvestigator:
+#     type: claude_code
+#     description: Investigates incidents using Claude Code with shell access
+#     custom_instructions: |
+#       You are an SRE investigating a Kubernetes incident.
+#       Use kubectl, log files, and available CLI tools to investigate.
+#     claude_code:
+#       max_turns: 50
+#       allowed_tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
+#       setting_sources: ["project"]
+#       workspace_dir: "deploy/claude-code/workspace"

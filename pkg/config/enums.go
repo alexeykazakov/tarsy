@@ -16,12 +16,14 @@ const (
 	AgentTypeOrchestrator AgentType = "orchestrator"
 	// AgentTypeAction evaluates findings and executes remediation actions (iterating controller)
 	AgentTypeAction AgentType = "action"
+	// AgentTypeClaudeCode delegates execution to a Claude Code sidecar (no internal LLM loop)
+	AgentTypeClaudeCode AgentType = "claude_code"
 )
 
 // IsValid checks if the agent type is valid (empty string is valid — means default).
 func (t AgentType) IsValid() bool {
 	switch t {
-	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeOrchestrator, AgentTypeAction:
+	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeOrchestrator, AgentTypeAction, AgentTypeClaudeCode:
 		return true
 	default:
 		return false

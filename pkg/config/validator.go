@@ -263,6 +263,19 @@ func (v *Validator) validateAgents() error {
 				return err
 			}
 		}
+
+		// Claude Code config only valid on claude_code agents
+		if agent.ClaudeCode != nil && agent.Type != AgentTypeClaudeCode {
+			return NewValidationError("agent", name, "claude_code", fmt.Errorf("claude_code config only valid on claude_code agents"))
+		}
+		if agent.Type == AgentTypeClaudeCode {
+			if agent.ClaudeCode == nil {
+				return NewValidationError("agent", name, "claude_code", fmt.Errorf("claude_code config block required for claude_code agents"))
+			}
+			if agent.ClaudeCode.MaxTurns != nil && *agent.ClaudeCode.MaxTurns < 1 {
+				return NewValidationError("agent", name, "claude_code.max_turns", fmt.Errorf("must be at least 1"))
+			}
+		}
 	}
 
 	return nil

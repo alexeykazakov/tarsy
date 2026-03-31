@@ -124,6 +124,10 @@ type ResolvedAgentConfig struct {
 	// OnDemandSkills: skills available via load_skill tool.
 	// Names + descriptions for the catalog prompt (Tier 2.6). Bodies loaded on tool call.
 	OnDemandSkills []SkillCatalogEntry
+
+	// ClaudeCode holds Claude Code sidecar configuration.
+	// Only set when Type == AgentTypeClaudeCode.
+	ClaudeCode *config.ClaudeCodeConfig
 }
 
 // ResolvedSkill is a skill whose full body has been resolved from the registry.

@@ -32,6 +32,8 @@ func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.Ex
 		return NewIteratingController(), nil
 	case config.AgentTypeAction:
 		return NewIteratingController(), nil
+	case config.AgentTypeClaudeCode:
+		return NewClaudeCodeController(), nil
 	default:
 		return nil, fmt.Errorf("unknown agent type: %q", agentType)
 	}

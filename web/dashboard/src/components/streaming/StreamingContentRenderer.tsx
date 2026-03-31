@@ -165,6 +165,63 @@ const StreamingToolContent = memo(({ content }: { content: string }) => {
 
 StreamingToolContent.displayName = 'StreamingToolContent';
 
+// --- ClaudeCodeBlock ---
+// Renders a streaming Claude Code session as a terminal view with auto-scroll.
+
+const ClaudeCodeBlock = memo(({ content }: { content: string }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [content]);
+
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5, alignItems: 'center' }}>
+        <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0 }}>
+          🤖
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700, textTransform: 'none', letterSpacing: 0.5,
+            fontSize: '0.75rem', color: 'secondary.main',
+          }}
+        >
+          Claude Code
+        </Typography>
+        <Box
+          sx={(theme) => ({
+            width: 14, height: 14,
+            border: '2px solid', borderColor: theme.palette.secondary.main,
+            borderTopColor: 'transparent', borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+          })}
+        />
+      </Box>
+      <Box
+        ref={scrollRef}
+        sx={(theme) => ({
+          ml: 4, maxHeight: 500, overflow: 'auto',
+          p: 1.5, borderRadius: 1,
+          fontFamily: 'monospace', fontSize: '0.82rem', lineHeight: 1.6,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'grey.900',
+          color: theme.palette.mode === 'dark' ? 'grey.300' : 'grey.100',
+          border: `1px solid ${theme.palette.divider}`,
+        })}
+      >
+        {content || 'Starting session...'}
+      </Box>
+    </Box>
+  );
+});
+
+ClaudeCodeBlock.displayName = 'ClaudeCodeBlock';
+
 // --- StreamingContentRenderer ---
 
 /**
@@ -354,6 +411,10 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
         </Box>
       </Box>
     );
+  }
+
+  if (item.eventType === TIMELINE_EVENT_TYPES.CLAUDE_CODE) {
+    return <ClaudeCodeBlock content={item.content || ''} />;
   }
 
   if (item.eventType === TIMELINE_EVENT_TYPES.EXECUTIVE_SUMMARY) {

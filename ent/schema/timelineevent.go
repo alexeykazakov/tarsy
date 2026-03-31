@@ -97,6 +97,7 @@ func (TimelineEvent) Fields() []ent.Field {
 				"provider_fallback",
 				"skill_loaded",
 				"memory_injected",
+				"claude_code",
 			),
 		field.Enum("status").
 			Values("streaming", "completed", "failed", "cancelled", "timed_out").

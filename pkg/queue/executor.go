@@ -606,29 +606,34 @@ func (e *RealSessionExecutor) executeAgent(
 	// Metadata carried on all agentResult returns below (for synthesis context).
 	resolvedBackend := string(resolvedConfig.LLMBackend)
 
-	// Resolve MCP servers and tool filter
-	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
-	if err != nil {
-		logger.Error("Failed to resolve MCP selection", "error", err)
-		failErr := fmt.Errorf("invalid MCP selection: %w", err)
-		if updateErr := input.stageService.UpdateAgentExecutionStatus(
-			context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
-		); updateErr != nil {
-			logger.Error("Failed to update agent execution status after MCP error", "error", updateErr)
+	// Claude Code agents bypass TARSy's MCP/LLM layers — the sidecar handles tools directly.
+	var toolExecutor agent.ToolExecutor
+	var failedServers map[string]string
+	if resolvedConfig.Type != config.AgentTypeClaudeCode {
+		// Resolve MCP servers and tool filter
+		serverIDs, toolFilter, mcpErr := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
+		if mcpErr != nil {
+			logger.Error("Failed to resolve MCP selection", "error", mcpErr)
+			failErr := fmt.Errorf("invalid MCP selection: %w", mcpErr)
+			if updateErr := input.stageService.UpdateAgentExecutionStatus(
+				context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+			); updateErr != nil {
+				logger.Error("Failed to update agent execution status after MCP error", "error", updateErr)
+			}
+			publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
+			return agentResult{
+				executionID:     exec.ID,
+				status:          agent.ExecutionStatusFailed,
+				err:             failErr,
+				llmBackend:      resolvedBackend,
+				llmProviderName: resolvedConfig.LLMProviderName,
+			}
 		}
-		publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
-		return agentResult{
-			executionID:     exec.ID,
-			status:          agent.ExecutionStatusFailed,
-			err:             failErr,
-			llmBackend:      resolvedBackend,
-			llmProviderName: resolvedConfig.LLMProviderName,
-		}
-	}
 
-	// Create MCP tool executor
-	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
-	defer func() { _ = toolExecutor.Close() }()
+		// Create MCP tool executor
+		toolExecutor, failedServers = createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
+		defer func() { _ = toolExecutor.Close() }()
+	}
 
 	// Retrieve memories for auto-injection into system prompt (only for agent types
 	// whose prompts consume MemoryBriefing — investigation, action, orchestrator).
