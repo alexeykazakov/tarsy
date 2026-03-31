@@ -182,11 +182,16 @@ agents:
 
 ### Phase 1: Production-ready
 
-- Pod-per-session deployment in OpenShift
+- Pod-per-session deployment in OpenShift (StatefulSet per session, ephemeral PVC)
 - Container image with CC SDK sidecar + workspace (skills, CLAUDE.md, rules baked in)
-- Kubernetes API integration for pod lifecycle management
+- Kubernetes API integration for pod lifecycle management (create, wait-for-ready, cleanup)
+- Pod readiness checking with terminal failure detection (ImagePullBackOff, CrashLoopBackOff)
+- **Network isolation via squid proxy + NetworkPolicy** — CC pod egress restricted to DNS + its own proxy; proxy enforces domain-based filtering (Anthropic API / Vertex AI endpoints + k8s API only). Prior art: paude (`temp/paude`) implements this exact pattern.
+- **Credentials via K8s Secrets + `secretKeyRef`** — same pattern as TARSy's existing production deployment (`tarsy-secrets`, `tarsy-gcp-service-account-secret`). Secrets created out-of-band, referenced in pod spec. No inline values in manifests.
+- **Claude sandbox config** — suppress trust dialog and onboarding prompts for headless SDK operation (`.claude.json` with `hasCompletedOnboarding: true`, `hasTrustDialogAccepted: true`)
 - Cost tracking and token usage in DB
 - Timeout and cancellation via HTTP request termination + pod cleanup
+- Domain aliases for CC network access (e.g., `tarsy-cc-sre` alias: Vertex AI + k8s API endpoints)
 
 ### Future considerations (deferred)
 
@@ -196,6 +201,7 @@ agents:
 - CC auto-memory (CLI-only feature — would require different integration approach if ever needed)
 - `settingSources: ["user"]` for user-level skills (not meaningful in containers currently)
 - Dedicated dashboard components for CC-specific event rendering
+- Skills via ConfigMap mount (update skills without image rebuild) — alternative to baking into image
 
 ## Use Cases
 
@@ -210,6 +216,17 @@ The orchestrator dispatches a Claude Code agent for tasks that benefit from auto
 ### Future: Remediation with code generation
 
 Action stages where Claude Code writes and applies remediation scripts, Kubernetes manifests, or configuration changes — with pod isolation for safety.
+
+## Prior Art: paude
+
+`https://github.com/bbrowning/paude` is a CLI tool for running AI coding agents (Claude Code, Cursor, Gemini, OpenClaw) in isolated containers with Podman and OpenShift backends. It solves many of the same problems and informs Phase 1 design:
+
+- **OpenShift pod-per-session** — StatefulSet + PVC, pod readiness with terminal failure detection, credential sync. Directly reusable patterns for Phase 1.
+- **Network isolation** — Per-session squid proxy + NetworkPolicy. CC pod can only reach DNS + its own proxy. Proxy enforces domain-based filtering via squid ACLs. Domain aliases (`vertexai`, `claude`, `github`, etc.) composable per session.
+- **Provider resolution** — Clean agent-provider matrix. Confirms `CLAUDE_CODE_USE_VERTEX=1` env var pattern for Vertex AI.
+- **Claude sandbox config** — Trust dialog suppression, onboarding bypass, permission skip for headless operation. Essential for automated SDK execution.
+- **Agent layer Dockerfile** — Installs CC CLI via `curl | bash` on top of a base image. Reusable for building the CC sidecar container image.
+- **Credential separation** — Distinguishes passthrough env vars (non-secret, in pod spec) from secret env vars (delivered separately). TARSy uses K8s Secrets with `secretKeyRef` for the same separation.
 
 ## What Is Out of Scope
 
