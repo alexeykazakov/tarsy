@@ -100,7 +100,7 @@ _Considered and rejected: Option A — map to existing types (lossy, Bash-as-MCP
 
 ## Q5: How are Claude Code credentials managed?
 
-Claude Code supports multiple auth backends: direct Anthropic (`ANTHROPIC_API_KEY`), Vertex AI (`CLAUDE_CODE_USE_VERTEX=1` + GCP credentials), and Bedrock (`CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials). TARSy already uses Vertex AI for Claude models (`vertexai-claude-sonnet` in config). The question is how the sidecar gets its credentials.
+Claude Code supports multiple auth backends. TARSy already uses Vertex AI for Claude models (`vertexai-claude-sonnet` in config). The question is how the sidecar gets its credentials. Scope limited to the two backends TARSy needs: direct Anthropic and Vertex AI.
 
 ### Option A: Static sidecar credentials (chosen)
 
@@ -108,7 +108,7 @@ The sidecar container gets credentials via environment variables at deployment t
 
 - **Pro:** Simplest — standard container env var configuration
 - **Pro:** Matches how the Python LLM service gets its own provider keys
-- **Pro:** Supports all backends: `ANTHROPIC_API_KEY` for direct, `CLAUDE_CODE_USE_VERTEX=1` + GCP creds for Vertex, `CLAUDE_CODE_USE_BEDROCK=1` + AWS creds for Bedrock
+- **Pro:** Supports both backends: `ANTHROPIC_API_KEY` for direct, `CLAUDE_CODE_USE_VERTEX=1` + GCP creds for Vertex
 - **Con:** Can't mix direct-Anthropic and Vertex agents in the same deployment
 
 **Decision:** Option A — static credentials on the sidecar via environment variables. The sidecar is configured with one auth backend per deployment (direct Anthropic or Vertex AI). Per-request provider selection (Option B) can be added post-PoC if mixed-provider deployments are needed.

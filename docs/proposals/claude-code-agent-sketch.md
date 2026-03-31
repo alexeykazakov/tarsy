@@ -113,12 +113,11 @@ This avoids information loss from force-mapping to existing event types and keep
 
 ### Authentication
 
-The sidecar gets credentials via environment variables at deployment time. Supports:
+The sidecar gets credentials via environment variables at deployment time. Supported backends:
 - **Direct Anthropic:** `ANTHROPIC_API_KEY`
 - **Vertex AI:** `CLAUDE_CODE_USE_VERTEX=1` + GCP credentials
-- **Bedrock:** `CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials
 
-All CC agents in a deployment use the same auth backend. Per-request provider selection can be added post-PoC if needed.
+All CC agents in a deployment use the same auth backend. Per-request provider selection can be added later if needed.
 
 ### Cost and budget control
 
@@ -160,7 +159,7 @@ agents:
       You are an SRE investigating a Kubernetes incident.
       Use kubectl, log files, and available CLI tools to investigate.
     claude_code:
-      max_turns: 30
+      max_turns: 50
       allowed_tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
       setting_sources: ["project"]
       workspace_dir: "deploy/claude-code/workspace"
