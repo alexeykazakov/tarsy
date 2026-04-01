@@ -10,6 +10,7 @@ __pycache__/
 # Node
 web/dashboard/node_modules/
 web/dashboard/dist/
+services/claude-code-sidecar/node_modules/
 
 # Config with secrets
 *.env

@@ -7,11 +7,12 @@ COMPOSE ?= COMPOSE_PROJECT_NAME=tarsy podman compose -f deploy/podman-compose.ym
 # ── Build ────────────────────────────────────────────────
 
 .PHONY: containers-build
-containers-build: ## Build tarsy and llm-service container images
+containers-build: ## Build tarsy, llm-service, and cc-sidecar container images
 	@echo -e "$(YELLOW)Building container images...$(NC)"
 	@podman build -t tarsy:dev -f Dockerfile .
 	@podman build -t tarsy-llm:dev -f llm-service/Dockerfile llm-service/
-	@echo -e "$(GREEN)✅ Container images built: tarsy:dev, tarsy-llm:dev$(NC)"
+	@podman build -t tarsy-cc-sidecar:dev -f services/claude-code-sidecar/Containerfile .
+	@echo -e "$(GREEN)✅ Container images built: tarsy:dev, tarsy-llm:dev, tarsy-cc-sidecar:dev$(NC)"
 
 # ── Deploy ───────────────────────────────────────────────
 
@@ -52,14 +53,14 @@ containers-logs-tarsy: ## Follow tarsy container logs
 containers-stop: ## Stop all containers
 	@$(COMPOSE) down 2>/dev/null || \
 		(echo -e "$(YELLOW)Compose down failed, forcing container removal...$(NC)" && \
-		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-oauth2 2>/dev/null; true)
+		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-cc-sidecar tarsy-oauth2 2>/dev/null; true)
 	@echo -e "$(GREEN)✅ Containers stopped$(NC)"
 
 .PHONY: containers-clean
 containers-clean: ## Stop containers and remove volumes
 	@$(COMPOSE) down -v 2>/dev/null || \
 		(echo -e "$(YELLOW)Compose down failed, forcing cleanup...$(NC)" && \
-		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-oauth2 2>/dev/null; \
+		 podman rm -f tarsy-postgres tarsy-llm tarsy-app tarsy-cc-sidecar tarsy-oauth2 2>/dev/null; \
 		 podman volume rm tarsy_postgres_data 2>/dev/null; true)
 	@podman network prune -f >/dev/null 2>&1 || true
 	@echo -e "$(GREEN)✅ Containers and volumes cleaned$(NC)"

@@ -93,7 +93,7 @@ dev: db-start build ## Start full dev environment (DB + LLM + backend + dashboar
 	@echo -e "$(BLUE)  LLM service:  localhost:50051$(NC)"
 	@echo -e "$(BLUE)  Go backend:   localhost:8080$(NC)"
 	@echo -e "$(BLUE)  Dashboard:    localhost:5173$(NC)"
-	@echo -e "$(BLUE)  CC sidecar:   localhost:3100  (optional — start with 'make cc-sidecar')$(NC)"
+	@echo -e "$(BLUE)  CC sidecar:   localhost:3100  (optional — use 'make dev-cc' instead)$(NC)"
 	@echo ""
 	@trap 'kill 0' EXIT; \
 		cd llm-service && uv run python -m llm.server & \
@@ -110,28 +110,28 @@ dev: db-start build ## Start full dev environment (DB + LLM + backend + dashboar
 		cd web/dashboard && npm run dev
 
 .PHONY: dev-cc
-dev-cc: db-start build ## Start full dev environment + Claude Code sidecar
+dev-cc: db-start build ## Start full dev environment + Claude Code sidecar (containerized)
 	@-pkill -f 'bin/tarsy' 2>/dev/null; true
 	@-pkill -f 'llm.server' 2>/dev/null; true
 	@-pkill -f 'web/dashboard.*vite' 2>/dev/null; true
-	@-pkill -f 'claude-code-sidecar' 2>/dev/null; true
+	@$(MAKE) cc-sidecar-stop 2>/dev/null; true
 	@sleep 0.3
-	@echo -e "$(GREEN)Starting development environment (with CC sidecar)...$(NC)"
+	@echo -e "$(GREEN)Starting development environment (with CC sidecar container)...$(NC)"
 	@echo -e "$(BLUE)  PostgreSQL:   localhost:5432$(NC)"
 	@echo -e "$(BLUE)  LLM service:  localhost:50051$(NC)"
 	@echo -e "$(BLUE)  Go backend:   localhost:8080$(NC)"
 	@echo -e "$(BLUE)  Dashboard:    localhost:5173$(NC)"
-	@echo -e "$(BLUE)  CC sidecar:   localhost:3100$(NC)"
+	@echo -e "$(BLUE)  CC sidecar:   localhost:3100  (container: tarsy-cc-sidecar)$(NC)"
 	@echo ""
-	@trap 'kill 0' EXIT; \
+	@$(MAKE) cc-sidecar-run
+	@trap 'kill 0; $(MAKE) cc-sidecar-stop 2>/dev/null' EXIT; \
 		cd llm-service && uv run python -m llm.server & \
 		echo "Waiting for LLM service on :50051..."; \
 		for i in $$(seq 1 40); do (echo >/dev/tcp/127.0.0.1/50051) 2>/dev/null && break; sleep 0.5; done; \
 		(echo >/dev/tcp/127.0.0.1/50051) 2>/dev/null || { echo "ERROR: LLM service did not start on :50051 within 20s" >&2; exit 1; }; \
-		cd services/claude-code-sidecar && npm run dev & \
 		echo "Waiting for CC sidecar on :3100..."; \
-		for i in $$(seq 1 20); do (echo >/dev/tcp/127.0.0.1/3100) 2>/dev/null && break; sleep 0.5; done; \
-		(echo >/dev/tcp/127.0.0.1/3100) 2>/dev/null || { echo "ERROR: CC sidecar did not start on :3100 within 10s" >&2; exit 1; }; \
+		for i in $$(seq 1 30); do (echo >/dev/tcp/127.0.0.1/3100) 2>/dev/null && break; sleep 0.5; done; \
+		(echo >/dev/tcp/127.0.0.1/3100) 2>/dev/null || { echo "ERROR: CC sidecar container did not become healthy on :3100 within 15s" >&2; exit 1; }; \
 		./bin/tarsy & TARSY_PID=$$!; \
 		sleep 1; \
 		if ! kill -0 $$TARSY_PID 2>/dev/null; then \
@@ -142,8 +142,8 @@ dev-cc: db-start build ## Start full dev environment + Claude Code sidecar
 		cd web/dashboard && npm run dev
 
 .PHONY: dev-cc-stop
-dev-cc-stop: dev-stop ## Stop all dev services including CC sidecar
-	@-pkill -f 'claude-code-sidecar' 2>/dev/null; true
+dev-cc-stop: dev-stop ## Stop all dev services including CC sidecar container
+	@$(MAKE) cc-sidecar-stop
 
 .PHONY: dev-stop
 dev-stop: db-stop ## Stop all dev services (DB + LLM + backend + dashboard)
@@ -355,9 +355,9 @@ setup: ## Install all dependencies (Go + Python + Dashboard) and bootstrap confi
 	@cd llm-service && uv sync
 	@echo -e "$(YELLOW)Installing dashboard dependencies...$(NC)"
 	@cd web/dashboard && npm ci
-	@if [ -f services/claude-code-sidecar/package.json ]; then \
-		echo -e "$(YELLOW)Installing CC sidecar dependencies...$(NC)"; \
-		cd services/claude-code-sidecar && npm install; \
+	@if [ -f services/claude-code-sidecar/Containerfile ]; then \
+		echo -e "$(YELLOW)Building CC sidecar container image...$(NC)"; \
+		$(MAKE) cc-sidecar-build; \
 	fi
 	@echo -e "$(GREEN)✅ All dependencies installed$(NC)"
 	@echo ""

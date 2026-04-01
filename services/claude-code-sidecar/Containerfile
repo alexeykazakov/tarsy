@@ -1,0 +1,50 @@
+# Stage 1: Install Node.js dependencies
+FROM mirror.gcr.io/library/node:24-slim AS builder
+
+WORKDIR /app
+COPY services/claude-code-sidecar/package*.json ./
+RUN npm ci --omit=dev
+
+# Stage 2: Runtime — Node.js + Claude CLI + investigation tools
+FROM mirror.gcr.io/library/node:24-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl jq ca-certificates git grep && \
+    rm -rf /var/lib/apt/lists/*
+
+# kubectl
+RUN KUBE_VER=$(curl -sL https://dl.k8s.io/release/stable.txt) && \
+    curl -Lo /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBE_VER}/bin/linux/amd64/kubectl" && \
+    chmod 755 /usr/local/bin/kubectl
+
+RUN useradd -m -s /bin/bash -u 1000 claude
+
+# Claude CLI — installed as the non-root user
+USER claude
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Switch back to root for COPY/chown, then drop privileges at the end
+USER root
+
+# Sidecar application code
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY services/claude-code-sidecar/src/ ./src/
+COPY services/claude-code-sidecar/tsconfig.json ./
+COPY services/claude-code-sidecar/package.json ./
+
+# Baked-in workspace (CLAUDE.md, settings.json, rules)
+COPY deploy/claude-code/workspace/ /workspace/
+
+RUN chown -R claude:claude /app /workspace
+
+USER claude
+
+ENV PORT=3100 \
+    CC_DEFAULT_WORKSPACE=/workspace \
+    CLAUDE_CODE_PATH=/home/claude/.claude/bin/claude
+
+EXPOSE 3100
+
+CMD ["node", "--import", "tsx", "src/index.ts"]

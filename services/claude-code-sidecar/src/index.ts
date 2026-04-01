@@ -46,7 +46,7 @@ app.post("/query", async (req, res) => {
   try {
     const cwd = body.workspace_dir
       ? path.resolve(body.workspace_dir)
-      : process.cwd();
+      : (process.env.CC_DEFAULT_WORKSPACE || process.cwd());
 
     const settingSources = (body.setting_sources ?? ["project"]) as Array<
       "user" | "project" | "local"
