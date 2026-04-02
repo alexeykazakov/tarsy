@@ -31,6 +31,26 @@ services:
       start_period: 10s
     restart: on-failure:3
 
+  credential-proxy:
+    build:
+      context: ..
+      dockerfile: services/credential-proxy/Containerfile
+    container_name: tarsy-credential-proxy
+    env_file:
+      - ./config/.env
+    environment:
+      ALLOWED_DOMAINS: ".anthropic.com,.googleapis.com,.openai.com,github.com,api.github.com,.githubusercontent.com"
+      PAUDE_PROXY_VERBOSE: "0"
+    volumes:
+      - proxy-ca:/data/ca
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3128/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: on-failure:3
+
   cc-sidecar:
     build:
       context: ..
@@ -38,24 +58,21 @@ services:
     container_name: tarsy-cc-sidecar
     env_file:
       - ./config/.env
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid
-      - /home/claude/.claude:rw
-    mem_limit: 4g
-    cpus: 4
+    environment:
+      HTTPS_PROXY: "http://credential-proxy:3128"
+      HTTP_PROXY: "http://credential-proxy:3128"
+      NO_PROXY: "kubernetes.default.svc,kubernetes.default,.svc,.cluster.local,localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      no_proxy: "kubernetes.default.svc,kubernetes.default,.svc,.cluster.local,localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      NODE_EXTRA_CA_CERTS: "/data/proxy-ca/ca.crt"
+      SSL_CERT_FILE: "/data/proxy-ca/ca.crt"
+      CURL_CA_BUNDLE: "/data/proxy-ca/ca.crt"
+      REQUESTS_CA_BUNDLE: "/data/proxy-ca/ca.crt"
+      ANTHROPIC_API_KEY: "paude-proxy-managed"
     volumes:
-      - ${HOME}/.kube:/home/claude/.kube:ro
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3100/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - proxy-ca:/data/proxy-ca:ro
+    depends_on:
+      credential-proxy:
+        condition: service_healthy
     restart: on-failure:3
 
   tarsy:
@@ -73,15 +90,12 @@ services:
       DB_NAME: tarsy
       DB_SSLMODE: disable
       LLM_SERVICE_ADDR: llm-service:50051
-      CLAUDE_CODE_SIDECAR_URL: http://cc-sidecar:3100
     volumes:
       - ./config:/app/config:ro
     depends_on:
       postgres:
         condition: service_healthy
       llm-service:
-        condition: service_healthy
-      cc-sidecar:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1 || exit 1"]
@@ -114,3 +128,4 @@ services:
 
 volumes:
   postgres_data:
+  proxy-ca:
