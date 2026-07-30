@@ -354,8 +354,8 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	defer cancelHeartbeat()
 	go e.runChatHeartbeat(heartbeatCtx, input.Chat.ID)
 
-	// 7. Create MCP ToolExecutor (shared helper, same as investigation)
-	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, logger)
+	// 7. Create MCP ToolExecutor (sandbox session key = agent execution ID)
+	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, exec.ID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	var chatSubCollector agent.SubAgentResultCollector

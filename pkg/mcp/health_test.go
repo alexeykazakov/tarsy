@@ -31,7 +31,7 @@ func TestHealthMonitor_HealthyServer(t *testing.T) {
 	monitor.pingTimeout = 5 * time.Second
 
 	// Wire client directly for test
-	client := newClient(registry)
+	client := newClient(registry, "")
 	sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test", Version: "test"}, nil)
 	session, err := sdkClient.Connect(context.Background(), ts.clientTransport, nil)
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestHealthMonitor_UnhealthyServer(t *testing.T) {
 	monitor.pingTimeout = 1 * time.Second
 
 	// Create client with no sessions (simulating connection failure)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	monitor.client = client
 
 	// Check a non-existent server session
@@ -108,7 +108,7 @@ func TestHealthMonitor_WarningClearedOnRecovery(t *testing.T) {
 
 	// Create healthy client
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test", Version: "test"}, nil)
 	session, err := sdkClient.Connect(context.Background(), ts.clientTransport, nil)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 	monitor.checkInterval = 50 * time.Millisecond
 
 	// Pre-wire a client so Start doesn't fail
-	client := newClient(registry)
+	client := newClient(registry, "")
 	sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test", Version: "test"}, nil)
 	session, err := sdkClient.Connect(context.Background(), ts.clientTransport, nil)
 	require.NoError(t, err)
@@ -170,4 +170,24 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 	}, 2*time.Second, 25*time.Millisecond, "health check should have run at least once")
 
 	monitor.Stop()
+}
+
+func TestHealthMonitor_EnsureClientRecovers(t *testing.T) {
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"test-server": {
+			Transport: config.TransportConfig{
+				Type:    config.TransportTypeStdio,
+				Command: "true",
+			},
+		},
+	})
+	warningsSvc := services.NewSystemWarningsService()
+	factory := NewTestClientFactory(registry, func(_ *Client, _ string) {})
+
+	monitor := NewHealthMonitor(factory, registry, warningsSvc)
+	require.Nil(t, monitor.client)
+
+	monitor.ensureClient(context.Background())
+	require.NotNil(t, monitor.client)
+	assert.Nil(t, monitor.client.sessionVars(), "health clients use empty session ID")
 }

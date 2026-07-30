@@ -49,6 +49,10 @@ func TestSanitizeTransport(t *testing.T) {
 			BearerToken: "live-bearer-token",
 			VerifySSL:   &verify,
 			Timeout:     30,
+			CustomHeaders: map[string]string{
+				"X-Session-ID": "{{.SESSION_ID}}",
+			},
+			SessionCleanupURL: "https://user:live-secret@mcp.example.com/sessions/{{.SESSION_ID}}?token=live-query-secret",
 		})
 
 		assert.Equal(t, "http", got.Type)
@@ -58,6 +62,8 @@ func TestSanitizeTransport(t *testing.T) {
 		assert.Equal(t, 30, got.Timeout)
 		assert.Empty(t, got.Command)
 		assert.Nil(t, got.Args)
+		assert.Equal(t, []string{"X-Session-ID"}, got.CustomHeaderKeys)
+		assert.Equal(t, "https://mcp.example.com/sessions/{{.SESSION_ID}}", got.SessionCleanupURL)
 
 		raw, err := json.Marshal(got)
 		require.NoError(t, err)
@@ -65,6 +71,11 @@ func TestSanitizeTransport(t *testing.T) {
 		assert.NotContains(t, string(raw), "live-query-secret")
 		assert.NotContains(t, string(raw), "live-bearer-token")
 		assert.Contains(t, string(raw), `"bearer_token_set":true`)
+		assert.Contains(t, string(raw), `"custom_header_keys"`)
+		assert.Contains(t, string(raw), `"session_cleanup_url"`)
+		assert.Contains(t, string(raw), `/sessions/{{.SESSION_ID}}`)
+		// Custom header *values* must stay out of the sanitized view.
+		assert.NotContains(t, string(raw), `"X-Session-ID":"{{.SESSION_ID}}"`)
 	})
 
 	t.Run("empty args and url omitted", func(t *testing.T) {

@@ -49,6 +49,33 @@ func TestExpandEnv(t *testing.T) {
 			want:  "endpoint: ",
 		},
 		{
+			name:  "SESSION_ID preserved for per-execution resolution",
+			input: "X-Session-ID: {{.SESSION_ID}}",
+			env:   map[string]string{},
+			want:  "X-Session-ID: {{.SESSION_ID}}",
+		},
+		{
+			name:  "SESSION_ID not taken from process environment",
+			input: "X-Session-ID: {{.SESSION_ID}}",
+			env:   map[string]string{"SESSION_ID": "should-not-use"},
+			want:  "X-Session-ID: {{.SESSION_ID}}",
+		},
+		{
+			name: "ENV secrets expanded while SESSION_ID preserved in same document",
+			input: `bearer_token: {{.API_TOKEN}}
+custom_headers:
+  X-Session-ID: "{{.SESSION_ID}}"
+session_cleanup_url: "https://cli/sessions/{{.SESSION_ID}}"`,
+			env: map[string]string{
+				"API_TOKEN":  "secret-token",
+				"SESSION_ID": "from-process-env",
+			},
+			want: `bearer_token: secret-token
+custom_headers:
+  X-Session-ID: "{{.SESSION_ID}}"
+session_cleanup_url: "https://cli/sessions/{{.SESSION_ID}}"`,
+		},
+		{
 			name:  "mixed present and missing variables",
 			input: "url: {{.PROTOCOL}}://{{.MISSING}}:{{.PORT}}",
 			env: map[string]string{

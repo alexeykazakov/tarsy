@@ -648,7 +648,7 @@ graph TB
 | File | Purpose |
 |------|---------|
 | `client.go` | Client -- MCP SDK session manager, per-server mutex |
-| `client_factory.go` | ClientFactory -- per-session client creation |
+| `client_factory.go` | ClientFactory -- per agent-execution client creation |
 | `executor.go` | ToolExecutor -- implements `agent.ToolExecutor` |
 | `params.go` | ActionInput parameter parsing (JSON/YAML/key-value/raw cascade) |
 | `router.go` | Tool name normalization (`server__tool` to `server.tool`), splitting, validation |
@@ -716,7 +716,7 @@ When an alert provides `mcp_selection`, it **replaces** the chain/agent's MCP se
 **Key Implementation Files**:
 - `pkg/mcp/client.go` -- MCP Client wrapping Go SDK
 - `pkg/mcp/executor.go` -- ToolExecutor implementing `agent.ToolExecutor`
-- `pkg/mcp/client_factory.go` -- Per-session client creation
+- `pkg/mcp/client_factory.go` -- Per agent-execution client creation
 - `pkg/mcp/health.go` -- Background health monitoring
 - `pkg/mcp/transport.go` -- Transport creation (stdio/HTTP/SSE)
 - `pkg/mcp/params.go` -- Multi-format ActionInput parsing

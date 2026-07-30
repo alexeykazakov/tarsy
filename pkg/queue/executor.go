@@ -634,8 +634,8 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 	}
 
-	// Create MCP tool executor
-	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
+	// Create MCP tool executor (sandbox session key = agent execution ID)
+	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, exec.ID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	// Retrieve memories for auto-injection into system prompt (only for agent types

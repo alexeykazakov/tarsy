@@ -35,14 +35,16 @@ type SystemConfigSkillResponse struct {
 
 // SanitizedTransport is the fail-closed MCP transport allowlist.
 type SanitizedTransport struct {
-	Type           string   `json:"type"`
-	Command        string   `json:"command,omitempty"`
-	Args           []string `json:"args,omitempty"`
-	URL            string   `json:"url,omitempty"`
-	VerifySSL      *bool    `json:"verify_ssl,omitempty"`
-	Timeout        int      `json:"timeout,omitempty"`
-	EnvKeys        []string `json:"env_keys,omitempty"`
-	BearerTokenSet bool     `json:"bearer_token_set"`
+	Type              string   `json:"type"`
+	Command           string   `json:"command,omitempty"`
+	Args              []string `json:"args,omitempty"`
+	URL               string   `json:"url,omitempty"`
+	VerifySSL         *bool    `json:"verify_ssl,omitempty"`
+	Timeout           int      `json:"timeout,omitempty"`
+	EnvKeys           []string `json:"env_keys,omitempty"`
+	CustomHeaderKeys  []string `json:"custom_header_keys,omitempty"`
+	SessionCleanupURL string   `json:"session_cleanup_url,omitempty"`
+	BearerTokenSet    bool     `json:"bearer_token_set"`
 }
 
 // MCPServerView is a sanitized MCP server config entry.
@@ -714,6 +716,21 @@ func sanitizeTransport(t config.TransportConfig) SanitizedTransport {
 		keys := slices.Collect(maps.Keys(t.Env))
 		slices.Sort(keys)
 		out.EnvKeys = keys
+	}
+
+	if len(t.CustomHeaders) > 0 {
+		keys := slices.Collect(maps.Keys(t.CustomHeaders))
+		slices.Sort(keys)
+		out.CustomHeaderKeys = keys
+	}
+
+	if t.SessionCleanupURL != "" {
+		// sanitizeURL percent-encodes path braces; restore {{ }} so session
+		// templates remain readable in the config viewer.
+		cleaned := sanitizeURL(t.SessionCleanupURL)
+		cleaned = strings.ReplaceAll(cleaned, "%7B%7B", "{{")
+		cleaned = strings.ReplaceAll(cleaned, "%7D%7D", "}}")
+		out.SessionCleanupURL = cleaned
 	}
 
 	return out
