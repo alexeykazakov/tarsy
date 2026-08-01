@@ -33,7 +33,7 @@ import {
   AccountTree,
 } from '@mui/icons-material';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
@@ -1500,12 +1500,14 @@ export function SessionDetailPage() {
 
   const hasFinalContent = session?.final_analysis || session?.executive_summary || session?.error_message;
 
-  return (
-    <>
-      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
-        <SharedHeader title={headerTitle} showBackButton>
-          {/* Reasoning / Trace view toggle */}
-          {session && !loading && (
+  // Memoized so the header (subscribed via PageHeaderContext) doesn't
+  // re-render on every SessionDetailPage render — only when something the
+  // toggle/live-indicator/auto-scroll controls actually depend on changes.
+  const headerActions = useMemo(
+    () => (
+      <>
+        {/* Reasoning / Trace view toggle */}
+        {session && !loading && (
             <ToggleButtonGroup
               value={view}
               exclusive
@@ -1590,9 +1592,21 @@ export function SessionDetailPage() {
 
           {/* Loading spinner */}
           {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
-        </SharedHeader>
+      </>
+    ),
+    [session, loading, isActive, autoScrollEnabled, view, handleViewChange, handleAutoScrollToggle],
+  );
 
-        <Box sx={{ mt: 2 }}>
+  usePageHeader({
+    title: headerTitle,
+    showBackButton: true,
+    actions: headerActions,
+  });
+
+  return (
+    <>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
+        <Box>
         {/* Loading state */}
         {loading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

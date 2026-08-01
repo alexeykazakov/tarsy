@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
+import { ConnectionStatusChip } from '../common/ConnectionStatusChip.tsx';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
@@ -16,6 +17,8 @@ interface TriageFilterBarProps {
   onRefresh: () => void;
   groups: Record<TriageGroupKey, TriageGroup | null>;
   loading?: boolean;
+  wsConnected?: boolean;
+  onRetryConnection?: () => void;
 }
 
 export function TriageFilterBar({
@@ -24,6 +27,8 @@ export function TriageFilterBar({
   onRefresh,
   groups,
   loading,
+  wsConnected,
+  onRetryConnection,
 }: TriageFilterBarProps) {
   const handleAssigneeChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
     if (value) {
@@ -39,6 +44,7 @@ export function TriageFilterBar({
       sx={{
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: 2,
         px: 0.5,
         py: 1,
@@ -67,6 +73,10 @@ export function TriageFilterBar({
         <Typography variant="body2" color="text.secondary">
           {totalCount} session{totalCount !== 1 ? 's' : ''}
         </Typography>
+      )}
+
+      {wsConnected !== undefined && (
+        <ConnectionStatusChip connected={wsConnected} onRetry={onRetryConnection} />
       )}
 
       <Tooltip title="Refresh triage data">

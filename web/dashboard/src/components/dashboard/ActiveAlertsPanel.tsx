@@ -19,9 +19,10 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material';
-import { Refresh, Wifi, WifiOff } from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
 import { ActiveSessionCard } from './ActiveSessionCard.tsx';
 import { QueuedAlertsSection } from './QueuedAlertsSection.tsx';
+import { ConnectionStatusChip } from '../common/ConnectionStatusChip.tsx';
 import type { ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
 
@@ -33,6 +34,7 @@ interface ActiveAlertsPanelProps {
   error: string | null;
   wsConnected: boolean;
   onRefresh: () => void;
+  onRetryConnection?: () => void;
 }
 
 export function ActiveAlertsPanel({
@@ -43,6 +45,7 @@ export function ActiveAlertsPanel({
   error,
   wsConnected,
   onRefresh,
+  onRetryConnection,
 }: ActiveAlertsPanelProps) {
   const totalCount = activeSessions.length + queuedSessions.length;
   const isInitialLoad = loading && totalCount === 0;
@@ -56,6 +59,7 @@ export function ActiveAlertsPanel({
         sx={{
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 1,
           px: 2,
           py: 1,
@@ -77,19 +81,7 @@ export function ActiveAlertsPanel({
           />
         )}
 
-        <Chip
-          icon={
-            wsConnected ? (
-              <Wifi sx={{ fontSize: 16 }} />
-            ) : (
-              <WifiOff sx={{ fontSize: 16 }} />
-            )
-          }
-          label={wsConnected ? 'Live' : 'Offline'}
-          color={wsConnected ? 'success' : 'default'}
-          size="small"
-          variant={wsConnected ? 'filled' : 'outlined'}
-        />
+        <ConnectionStatusChip connected={wsConnected} onRetry={onRetryConnection} />
 
         <Tooltip title="Refresh alerts">
           <span>
