@@ -16,6 +16,7 @@ import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import TimelineItem from './TimelineItem';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import ErrorCard from './ErrorCard';
 import { formatDurationMs } from '../../utils/format';
 import {
@@ -45,6 +46,14 @@ interface SubAgentCardProps {
   searchTerm?: string;
   /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay) */
   costEstimationEnabled?: boolean;
+  /** Session id for deep-link copy controls on nested timeline items */
+  sessionId?: string;
+  /** Deep-link event id that should open (also expands this card if nested) */
+  forceExpandedItemId?: string;
+  /** Share URL for this sub-agent card (usually the dispatch tool-call event) */
+  linkUrl?: string;
+  /** Event id used as scroll/focus anchor for the card header */
+  anchorEventId?: string;
 }
 
 const SubAgentCard: React.FC<SubAgentCardProps> = ({
@@ -61,12 +70,24 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   isItemCollapsible,
   searchTerm,
   costEstimationEnabled = false,
+  sessionId,
+  forceExpandedItemId,
+  linkUrl,
+  anchorEventId,
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  const containsForceExpandedItem =
+    !!forceExpandedItemId &&
+    (forceExpandedItemId === anchorEventId || items.some((i) => i.id === forceExpandedItemId));
+  const [expanded, setExpanded] = useState(containsForceExpandedItem);
   const [prevExpandAllToolCalls, setPrevExpandAllToolCalls] = useState(expandAllToolCalls);
   if (expandAllToolCalls !== prevExpandAllToolCalls) {
     setPrevExpandAllToolCalls(expandAllToolCalls);
     setExpanded(expandAllToolCalls);
+  }
+  const [prevForceExpandedItemId, setPrevForceExpandedItemId] = useState(forceExpandedItemId);
+  if (forceExpandedItemId !== prevForceExpandedItemId) {
+    setPrevForceExpandedItemId(forceExpandedItemId);
+    if (containsForceExpandedItem) setExpanded(true);
   }
 
   const eo = executionOverview;
@@ -105,6 +126,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   return (
     <Box
+      data-flow-item-id={anchorEventId}
       sx={{
         ml: 4, my: 0.5, mr: 1,
         border: isRunning ? '1px dashed' : '1px solid',
@@ -202,7 +224,8 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1.5, pt: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.25, px: 1.5, pt: 0.5, color: 'text.secondary' }}>
+            {linkUrl && <CopyLinkButton url={linkUrl} />}
             <CopyButton text={copyText} variant="icon" size="small" tooltip="Copy sub-agent content" />
           </Box>
 
@@ -218,6 +241,8 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
                 expandAllToolCalls={expandAllToolCalls}
                 isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
                 searchTerm={searchTerm}
+                sessionId={sessionId}
+                forceExpanded={forceExpandedItemId === item.id}
               />
             ))}
 

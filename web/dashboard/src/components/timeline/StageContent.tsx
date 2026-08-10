@@ -9,6 +9,7 @@ import {
   SwapHoriz,
 } from '@mui/icons-material';
 import { FLOW_ITEM, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
+import { sessionDeepLinkUrl } from '../../utils/deepLink';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -57,6 +58,10 @@ interface StageContentProps {
   stageType?: string;
   /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay) */
   costEstimationEnabled?: boolean;
+  /** Session id for deep-link copy controls on timeline items */
+  sessionId?: string;
+  /** Deep-link event id that should open (tool calls, native tools, etc.) */
+  forceExpandedItemId?: string;
 }
 
 interface TabPanelProps {
@@ -271,6 +276,8 @@ const StageContent: React.FC<StageContentProps> = ({
   searchTerm,
   stageType,
   costEstimationEnabled = false,
+  sessionId,
+  forceExpandedItemId,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -434,6 +441,27 @@ const StageContent: React.FC<StageContentProps> = ({
     setSelectedTab(clampedSelectedTab);
   }
 
+  // Deep link: select the execution tab that owns forceExpandedItemId so the
+  // target mounts (inactive TabPanels defer first render). Nested sub-agent
+  // events map to their parent execution's tab.
+  React.useEffect(() => {
+    if (!forceExpandedItemId || mergedExecutions.length <= 1) return;
+
+    const target = items.find((item) => item.id === forceExpandedItemId);
+    if (!target?.executionId) return;
+
+    let ownerExecId = target.executionId;
+    if (target.parentExecutionId) {
+      ownerExecId = target.parentExecutionId;
+    } else if (subAgentIds.has(ownerExecId)) {
+      ownerExecId = subAgentParentMap.get(ownerExecId) ?? ownerExecId;
+    }
+
+    const tabIndex = mergedExecutions.findIndex((e) => e.executionId === ownerExecId);
+    if (tabIndex < 0) return;
+    setSelectedTab((prev) => (prev === tabIndex ? prev : tabIndex));
+  }, [forceExpandedItemId, items, mergedExecutions, subAgentIds, subAgentParentMap]);
+
   // Notify parent when selected agent actually changes (parallel stages only).
   // Uses a ref to skip redundant calls when mergedExecutions array identity
   // changes but the selected execution ID is the same.
@@ -504,11 +532,18 @@ const StageContent: React.FC<StageContentProps> = ({
 
   const renderSubAgentCard = (subExecId: string, dispatchItem?: FlowItem) => {
     const fallback = dispatchItem ? parseDispatchArgs(dispatchItem) : {};
+    const nestedItems = subAgentItemsByExec.get(subExecId) || [];
+    // Card replaces the dispatch tool-call in the timeline — use that event as the share anchor.
+    const anchorItem = dispatchItem ?? nestedItems[0];
+    const linkUrl =
+      sessionId && anchorItem?.stageId
+        ? sessionDeepLinkUrl(sessionId, { stage: anchorItem.stageId, event: anchorItem.id })
+        : undefined;
     return (
       <SubAgentCard
         key={`sub-${subExecId}`}
         executionOverview={subAgentOverviewMap.get(subExecId)}
-        items={subAgentItemsByExec.get(subExecId) || []}
+        items={nestedItems}
         streamingEvents={subAgentStreamingByExec.get(subExecId)}
         executionStatus={subAgentExecutionStatuses?.get(subExecId)}
         progressStatus={subAgentProgressStatuses?.get(subExecId)}
@@ -520,6 +555,10 @@ const StageContent: React.FC<StageContentProps> = ({
         isItemCollapsible={isItemCollapsible}
         searchTerm={searchTerm}
         costEstimationEnabled={costEstimationEnabled}
+        sessionId={sessionId}
+        forceExpandedItemId={forceExpandedItemId}
+        linkUrl={linkUrl}
+        anchorEventId={anchorItem?.id}
       />
     );
   };
@@ -578,6 +617,8 @@ const StageContent: React.FC<StageContentProps> = ({
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
           searchTerm={searchTerm}
           stageType={stageType}
+          sessionId={sessionId}
+          forceExpanded={forceExpandedItemId === item.id}
         />,
       );
     }

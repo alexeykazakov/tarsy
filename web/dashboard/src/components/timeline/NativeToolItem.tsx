@@ -7,6 +7,7 @@ import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { highlightSearchTermNodes } from '../../utils/search';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 
 interface CodeBlock {
   type: string;
@@ -19,6 +20,9 @@ interface CodeBlock {
 interface NativeToolItemProps {
   item: FlowItem;
   searchTerm?: string;
+  /** Open for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
+  linkUrl?: string;
 }
 
 /** Parse content preview summary for the header */
@@ -64,8 +68,13 @@ const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
  * NativeToolItem - renders code_execution, search_result, and url_context timeline events.
  * Uses info/teal color scheme to differentiate from MCP tool calls.
  */
-function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function NativeToolItem({ item, searchTerm, forceExpanded = false, linkUrl }: NativeToolItemProps) {
+  const [expanded, setExpanded] = useState(forceExpanded);
+  const [prevForceExpanded, setPrevForceExpanded] = useState(forceExpanded);
+  if (forceExpanded !== prevForceExpanded) {
+    setPrevForceExpanded(forceExpanded);
+    if (forceExpanded) setExpanded(true);
+  }
   const theme = useTheme();
   const { mode, systemMode } = useColorScheme();
   const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
@@ -538,7 +547,8 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
 
       <Collapse in={expanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.25, mb: 0.5, color: 'text.secondary' }}>
+            {linkUrl && <CopyLinkButton url={linkUrl} />}
             <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy content" />
           </Box>
           {renderContent()}

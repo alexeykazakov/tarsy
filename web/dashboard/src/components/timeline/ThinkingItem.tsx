@@ -18,6 +18,7 @@ interface ThinkingItemProps {
   expandAll?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  linkUrl?: string;
 }
 
 function ThinkingItem({
@@ -27,6 +28,7 @@ function ThinkingItem({
   expandAll = false,
   isCollapsible = true,
   searchTerm,
+  linkUrl,
 }: ThinkingItemProps) {
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
@@ -69,7 +71,7 @@ function ThinkingItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <ContentCard maxHeight="900px" copyText={item.content || ''}>
+            <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
               <Box
                 sx={{
                   '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },

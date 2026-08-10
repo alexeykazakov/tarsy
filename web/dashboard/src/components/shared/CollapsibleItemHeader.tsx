@@ -20,7 +20,7 @@ export default function CollapsibleItemHeader({
   headerTextTransform = 'none',
   shouldShowCollapsed,
   collapsedHeaderOpacity,
-  onToggle
+  onToggle,
 }: CollapsibleItemHeaderProps) {
   return (
     <Box 

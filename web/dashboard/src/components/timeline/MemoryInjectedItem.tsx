@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Box, Typography, Chip, alpha } from '@mui/material';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import InsightsCard from './InsightsCard';
 import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
 import { highlightSearchTermNodes } from '../../utils/search';
@@ -30,9 +31,12 @@ interface MemoryInjectedItemProps {
   item: FlowItem;
   expandAll?: boolean;
   searchTerm?: string;
+  /** Open for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
+  linkUrl?: string;
 }
 
-function MemoryInjectedItem({ item, expandAll = false, searchTerm }: MemoryInjectedItemProps) {
+function MemoryInjectedItem({ item, expandAll = false, searchTerm, forceExpanded = false, linkUrl }: MemoryInjectedItemProps) {
   const count = (item.metadata?.count as number) || 0;
   const memories = useMemo(() => parseMemoryLines(item.content || ''), [item.content]);
 
@@ -54,12 +58,16 @@ function MemoryInjectedItem({ item, expandAll = false, searchTerm }: MemoryInjec
       title="Past Investigation Insights"
       headerExtras={headerExtras}
       expandAll={expandAll}
+      forceExpanded={forceExpanded}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <Typography variant="caption" color="text.secondary">
           Lessons applied from previous investigations
         </Typography>
-        <CopyButton text={item.content || ''} variant="icon" size="small" tooltip="Copy memory content" />
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
+          {linkUrl && <CopyLinkButton url={linkUrl} />}
+          <CopyButton text={item.content || ''} variant="icon" size="small" tooltip="Copy memory content" />
+        </Box>
       </Box>
       {memories.length > 0 ? (
         <MemoryCardList

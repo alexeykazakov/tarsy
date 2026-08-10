@@ -8,6 +8,8 @@ interface InsightsCardProps {
   icon?: ReactNode;
   headerExtras?: ReactNode;
   expandAll?: boolean;
+  /** Open for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
   children: ReactNode;
 }
 
@@ -16,12 +18,17 @@ interface InsightsCardProps {
  * dynamically recalled). Provides the green-accent shell with a brain icon
  * by default; callers can override with a custom icon prop.
  */
-function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, children }: InsightsCardProps) {
-  const [expanded, setExpanded] = useState(false);
+function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, forceExpanded = false, children }: InsightsCardProps) {
+  const [expanded, setExpanded] = useState(forceExpanded);
   const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
   if (expandAll !== prevExpandAll) {
     setPrevExpandAll(expandAll);
     setExpanded(expandAll);
+  }
+  const [prevForceExpanded, setPrevForceExpanded] = useState(forceExpanded);
+  if (forceExpanded !== prevForceExpanded) {
+    setPrevForceExpanded(forceExpanded);
+    if (forceExpanded) setExpanded(true);
   }
   const isExpanded = expandAll || expanded;
 

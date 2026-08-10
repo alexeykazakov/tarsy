@@ -9,6 +9,7 @@ import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import { highlightSearchTermNodes } from '../../utils/search';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ToolSummaryItemProps {
@@ -18,6 +19,7 @@ interface ToolSummaryItemProps {
   expandAll?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  linkUrl?: string;
 }
 
 /**
@@ -31,6 +33,7 @@ function ToolSummaryItem({
   expandAll = false,
   isCollapsible = true,
   searchTerm,
+  linkUrl,
 }: ToolSummaryItemProps) {
   const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
@@ -72,7 +75,8 @@ function ToolSummaryItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.25, mb: 0.5, color: 'text.secondary' }}>
+              {linkUrl && <CopyLinkButton url={linkUrl} />}
               <CopyButton text={item.content || ''} variant="icon" size="small" tooltip="Copy summary" />
             </Box>
             <Box sx={(theme) => ({ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: `2px solid ${alpha(theme.palette.warning.main, 0.2)}` })}>

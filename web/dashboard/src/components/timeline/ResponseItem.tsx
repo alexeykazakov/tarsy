@@ -5,6 +5,7 @@ import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
 import ContentCard from '../shared/ContentCard';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
@@ -41,6 +42,7 @@ interface ResponseItemProps {
   isCollapsible?: boolean;
   searchTerm?: string;
   stageType?: string;
+  linkUrl?: string;
 }
 
 /**
@@ -56,6 +58,7 @@ function ResponseItem({
   isCollapsible = false,
   searchTerm,
   stageType,
+  linkUrl,
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
@@ -134,7 +137,7 @@ function ResponseItem({
             />
             <Collapse in={!shouldShowCollapsed} timeout={300}>
               <Box sx={{ mt: 1, pb: 3 }}>
-                <ContentCard>
+                <ContentCard linkUrl={linkUrl}>
                   {totalActions === 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                       No new learnings extracted from this investigation.
@@ -228,8 +231,8 @@ function ResponseItem({
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
-            <Box sx={{ mt: 0.5, pb: 3 }}>
-              <ContentCard maxHeight="900px" copyText={item.content || ''}>
+                        <Box sx={{ mt: 0.5, pb: 3 }}>
+              <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
                 {renderContent()}
               </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
@@ -280,8 +283,8 @@ function ResponseItem({
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
-            <Box sx={{ mt: 0.5 }}>
-              <ContentCard maxHeight="900px" copyText={item.content || ''}>
+                        <Box sx={{ mt: 0.5 }}>
+              <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
                 {renderContent()}
               </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
@@ -332,6 +335,11 @@ function ResponseItem({
         )}
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
+            {linkUrl && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5, color: 'text.secondary' }}>
+                <CopyLinkButton url={linkUrl} />
+              </Box>
+            )}
             {renderContent()}
             {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
           </Box>
