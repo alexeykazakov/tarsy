@@ -3,8 +3,11 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
 	"os"
+	"slices"
+	"time"
 )
 
 // Validator validates configuration comprehensively with clear error messages
@@ -899,14 +902,115 @@ func (v *Validator) validateCostEstimation() error {
 		if name == "" {
 			return fmt.Errorf("system.cost_estimation.model_rates: model name must not be empty")
 		}
-		if rate.InputPerMillion < 0 {
-			return fmt.Errorf("system.cost_estimation.model_rates.%s.input_per_million must be >= 0", name)
+		if err := validatePerMillionRate(rate.InputPerMillion, fmt.Sprintf("system.cost_estimation.model_rates.%s.input_per_million", name)); err != nil {
+			return err
 		}
-		if rate.OutputPerMillion < 0 {
-			return fmt.Errorf("system.cost_estimation.model_rates.%s.output_per_million must be >= 0", name)
+		if err := validatePerMillionRate(rate.OutputPerMillion, fmt.Sprintf("system.cost_estimation.model_rates.%s.output_per_million", name)); err != nil {
+			return err
 		}
 	}
 
+	if err := validatePromotions(ce.Promotions); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validatePerMillionRate rejects NaN, ±Inf, and negative per-million USD rates.
+func validatePerMillionRate(value float64, field string) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return fmt.Errorf("%s must be a finite number >= 0", field)
+	}
+	if value < 0 {
+		return fmt.Errorf("%s must be >= 0", field)
+	}
+	return nil
+}
+
+// promoWindow is a parsed promotion used for overlap checks.
+type promoWindow struct {
+	index int
+	model string
+	start time.Time // effective start; zero = -∞
+	end   time.Time
+	open  bool // true when start was omitted (-∞)
+}
+
+func validatePromotions(promos []PromotionConfig) error {
+	seenIDs := make(map[string]int, len(promos))
+	byModel := map[string][]promoWindow{}
+
+	for i, p := range promos {
+		prefix := fmt.Sprintf("system.cost_estimation.promotions[%d]", i)
+		if p.Model == "" {
+			return fmt.Errorf("%s.model must not be empty", prefix)
+		}
+		if p.End == "" {
+			return fmt.Errorf("%s.end is required", prefix)
+		}
+		if err := validatePerMillionRate(p.InputPerMillion, prefix+".input_per_million"); err != nil {
+			return err
+		}
+		if err := validatePerMillionRate(p.OutputPerMillion, prefix+".output_per_million"); err != nil {
+			return err
+		}
+		if p.ID != "" {
+			if prev, dup := seenIDs[p.ID]; dup {
+				return fmt.Errorf("%s.id %q duplicates promotions[%d].id", prefix, p.ID, prev)
+			}
+			seenIDs[p.ID] = i
+		}
+
+		start, end, err := ParsePromotionWindow(p.Start, p.End)
+		if err != nil {
+			return fmt.Errorf("%s: %w", prefix, err)
+		}
+		w := promoWindow{index: i, model: p.Model, end: end, open: start == nil}
+		if start != nil {
+			w.start = *start
+			if !end.After(*start) {
+				return fmt.Errorf("%s: end must be after start", prefix)
+			}
+		}
+		byModel[p.Model] = append(byModel[p.Model], w)
+	}
+
+	for model, windows := range byModel {
+		if err := checkPromoOverlaps(model, windows); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkPromoOverlaps(model string, windows []promoWindow) error {
+	if len(windows) < 2 {
+		return nil
+	}
+	// Sort by effective start: open-ended (-∞) first, then by start ascending.
+	slices.SortFunc(windows, func(a, b promoWindow) int {
+		if a.open != b.open {
+			if a.open {
+				return -1
+			}
+			return 1
+		}
+		if c := a.start.Compare(b.start); c != 0 {
+			return c
+		}
+		return a.end.Compare(b.end)
+	})
+
+	for i := 1; i < len(windows); i++ {
+		prev, cur := windows[i-1], windows[i]
+		// After sorting, intervals overlap iff cur's effective start is before prev.end.
+		// Two omitted starts (-∞) always overlap.
+		if cur.open || cur.start.Before(prev.end) {
+			return fmt.Errorf("system.cost_estimation.promotions: overlapping windows for model %q (index %d and %d)",
+				model, prev.index, cur.index)
+		}
+	}
 	return nil
 }
 
