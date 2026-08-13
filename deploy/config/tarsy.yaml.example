@@ -79,6 +79,30 @@ system:
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
     channel: "C12345678"           # Slack channel ID (required when enabled)
 
+  # Global holidays for Tier 0 calendar / staffing context (UTC, year-agnostic MM-DD).
+  #
+  # At prompt-build time TARSy injects wall-clock UTC into every investigation /
+  # chat / action agent system prompt as Tier 0 Context, for example:
+  #   Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)
+  #   Staffing: reduced (humans less likely to review promptly)
+  # Saturday/Sunday classify as WEEKEND even when not listed here. Matching a
+  # holiday date classifies as GLOBAL_HOLIDAY (<name>) and takes priority over
+  # WEEKEND. Agents should read this block — they must not re-derive weekday or
+  # holiday from alert/session timestamps.
+  #
+  # Typical use: give agents a soft signal when humans are less likely to review
+  # promptly (weekends / global holidays). It does not by itself trigger actions.
+  #
+  # When omitted or empty, TARSy uses a small built-in list (New Year's Day,
+  # Christmas). When set, this list REPLACES the built-in defaults — include
+  # every date you want classified as a holiday (e.g. a multi-day break).
+  # See docs/adr/0022-tier0-calendar-staffing.md.
+  # holidays:
+  #   - date: "12-25"
+  #     name: "Christmas"
+  #   - date: "01-01"
+  #     name: "New Year's Day"
+
   # LLM usage cost estimation (list-price estimates, not invoice truth).
   # Enabled by default when this block is omitted. When disabled, token usage
   # is still tracked but estimated USD is not computed or shown.

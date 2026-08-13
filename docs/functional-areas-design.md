@@ -524,6 +524,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 
 **Tiered system** (`pkg/agent/prompt/builder.go`, `pkg/agent/prompt/instructions.go`, `pkg/agent/prompt/skills.go`):
 ```
+Tier 0:   Dynamic context                  (wall-clock UTC time + WEEKEND / GLOBAL_HOLIDAY + staffing hint)
 Tier 1:   General SRE Instructions        (hardcoded)
 Tier 2:   MCP Server Instructions          (per configured server)
 Tier 2.5: Required Skill Content           (from required_skills — injected bodies)
@@ -531,6 +532,26 @@ Tier 2.6: On-Demand Skill Catalog          (names + descriptions, with load_skil
 Tier 3:   Agent Custom Instructions        (from custom_instructions)
 Tier 4:   Lessons from Past Investigations (auto-injected memories, investigation sessions only)
 ```
+
+**Tier 0 — calendar / staffing context.** At prompt-build time TARSy injects wall-clock UTC (`time.Now().UTC()`, not alert or session timestamps) into every investigation, chat, and action agent system prompt. Example:
+
+```text
+## Context
+
+Current time: 2026-12-25T08:00:00Z (Friday)
+Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)
+Staffing: reduced (humans less likely to review promptly)
+```
+
+Classification (priority: holiday over weekend):
+
+- Matching `system.holidays` (year-agnostic `MM-DD`) → `GLOBAL_HOLIDAY (<name>)` + reduced staffing
+- Saturday / Sunday UTC → `WEEKEND` + reduced staffing
+- Otherwise → `WEEKDAY` + normal staffing
+
+Agents must **read** this block — they must not re-derive weekday or holiday from alert metadata. Typical use is giving agents a soft signal when humans are less likely to review promptly; Tier 0 does not by itself trigger actions. Configure via `system.holidays` in `tarsy.yaml` (see `deploy/config/tarsy.yaml.example`). When omitted or empty, TARSy uses a small built-in list (New Year's Day, Christmas). When set, the list **replaces** those defaults — include every date that should count as a holiday (for example a multi-day Christmas break).
+
+**For detailed design**: See [ADR-0022: Tier 0 Calendar and Staffing Context](adr/0022-tier0-calendar-staffing.md).
 
 **Agent Skills** (`pkg/agent/skill/tool_executor.go`) provide reusable domain knowledge. Required skills are injected as content (Tier 2.5); on-demand skills appear as a catalog with a `load_skill` tool (Tier 2.6). Skill resolution happens in `config_resolver.go` — the prompt builder only formats pre-resolved data from `ResolvedAgentConfig.RequiredSkillContent` and `ResolvedAgentConfig.OnDemandSkills`. `SkillToolExecutor` wraps the inner tool executor and intercepts `load_skill` calls, reading from the in-memory `SkillRegistry`. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 
@@ -1308,6 +1329,7 @@ Two Ent edges connect memories to sessions:
 Memories are injected into the system prompt as Tier 4 (after custom instructions):
 
 ```text
+Tier 0:   Dynamic context (UTC time + WEEKEND / GLOBAL_HOLIDAY + staffing)
 Tier 1:   General SRE Instructions
 Tier 2:   MCP Server Instructions
 Tier 2.5: Required Skill Content
@@ -1315,6 +1337,8 @@ Tier 2.6: On-Demand Skill Catalog
 Tier 3:   Agent Custom Instructions
 Tier 4:   Lessons from Past Investigations (auto-injected memories)
 ```
+
+Tier 0 calendar / staffing behavior is described under [Instruction Composition](#instruction-composition).
 
 #### Configuration
 

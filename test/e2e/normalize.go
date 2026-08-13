@@ -28,16 +28,22 @@ type Normalizer struct {
 
 // Regex patterns for dynamic values.
 var (
-	uuidRe            = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	timestampRe       = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
-	unixTSRe          = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
-	dbEventIDRe       = regexp.MustCompile(`"db_event_id":\s*\d+`)
-	connIDRe          = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
-	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
-	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
-	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
-	memoryScoreRe     = regexp.MustCompile(`, score: -?\d+\.\d+`)
-	shortTimestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
+	uuidRe                = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	timestampRe           = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+	unixTSRe              = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
+	dbEventIDRe           = regexp.MustCompile(`"db_event_id":\s*\d+`)
+	connIDRe              = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
+	durationMsRe          = regexp.MustCompile(`"duration_ms":\s*\d+`)
+	currentTimeLineRe     = regexp.MustCompile(`Current time: [^\n]+`)
+	calendarContextLineRe = regexp.MustCompile(`Calendar context \(UTC\): [^\n]+`)
+	staffingLineRe        = regexp.MustCompile(`Staffing: [^\n]+`)
+	// Matches LLM-interaction golden bodies: system message content until the next
+	// message header (or EOF). Used so calendar/staffing placeholders do not rewrite
+	// user/assistant text that happens to mention those phrases.
+	systemMessageBodyRe = regexp.MustCompile(`(?s)(=== MESSAGE: system ===\n)(.*?)((?:\n=== MESSAGE: )|\z)`)
+	memoryAgeRe         = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
+	memoryScoreRe       = regexp.MustCompile(`, score: -?\d+\.\d+`)
+	shortTimestampRe    = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.
@@ -138,8 +144,15 @@ func (n *Normalizer) Normalize(data string) string {
 		data = strings.ReplaceAll(data, id, placeholder)
 	}
 
-	// 7. Replace "Current time:" line (varies every run).
+	// 7. Replace Tier 0 lines that vary by wall-clock time.
+	// Current time stays global (same as before). Calendar/staffing are only
+	// rewritten inside system message bodies so user/assistant text is preserved.
 	data = currentTimeLineRe.ReplaceAllString(data, "Current time: {CURRENT_TIME}")
+	data = replaceInSystemMessageBodies(data, func(body string) string {
+		body = calendarContextLineRe.ReplaceAllString(body, "Calendar context (UTC): {CALENDAR_CONTEXT}")
+		body = staffingLineRe.ReplaceAllString(body, "Staffing: {STAFFING}")
+		return body
+	})
 
 	// 8. Replace memory score values (vary based on ranking computation).
 	data = memoryScoreRe.ReplaceAllString(data, ", score: {SCORE}")
@@ -172,6 +185,18 @@ func (n *Normalizer) Normalize(data string) string {
 	data = durationMsRe.ReplaceAllString(data, `"duration_ms": {DURATION_MS}`)
 
 	return data
+}
+
+// replaceInSystemMessageBodies applies fn to each === MESSAGE: system === body
+// in AssertGoldenLLMInteraction output, leaving other roles unchanged.
+func replaceInSystemMessageBodies(data string, fn func(string) string) string {
+	return systemMessageBodyRe.ReplaceAllStringFunc(data, func(match string) string {
+		parts := systemMessageBodyRe.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		return parts[1] + fn(parts[2]) + parts[3]
+	})
 }
 
 // NormalizeBytes is a convenience wrapper for Normalize on byte slices.
