@@ -118,6 +118,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessPartial, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(300), *summary.Totals.UnpricedTokenCount)
 
 		byModel := map[string]models.UsageModelBreakdown{}
 		for _, m := range summary.ByModel {
@@ -144,6 +146,31 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessPartial, summary.TopSessions[0].CostCompleteness)
 		require.NotNil(t, summary.TopSessions[0].EstimatedCostUsd)
 		assert.InDelta(t, 0.012, *summary.TopSessions[0].EstimatedCostUsd, 1e-9)
+	})
+
+	t.Run("unpriced_token_count sums unpriced token-bearing rows only", func(t *testing.T) {
+		uc := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, uc.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, uc.Client, usageSeed{
+			AlertData: "unpriced-token-sum",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		seedLLMInteraction(t, uc.Client, sid, stageID, execID, "priced-model", 100, 50, 150, floatPtr(0.01), 0)
+		seedLLMInteraction(t, uc.Client, sid, stageID, execID, "unpriced-a", 80, 20, 100, nil, 0)
+		seedLLMInteraction(t, uc.Client, sid, stageID, execID, "unpriced-b", 150, 50, 200, nil, 0)
+		seedLLMInteraction(t, uc.Client, sid, stageID, execID, "zero-token", 0, 0, 0, nil, 0)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, int64(450), summary.Totals.TotalTokens)
+		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Equal(t, 2, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(300), *summary.Totals.UnpricedTokenCount)
 	})
 
 	t.Run("model average counts distinct sessions that used that model", func(t *testing.T) {
@@ -213,6 +240,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessNone, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(15), *summary.Totals.UnpricedTokenCount)
 	})
 
 	t.Run("rank_by cost vs tokens", func(t *testing.T) {
@@ -388,6 +417,7 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Nil(t, summary.Totals.AverageCostUsd)
 		assert.Empty(t, summary.Totals.CostCompleteness)
 		assert.Nil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Nil(t, summary.Totals.UnpricedTokenCount)
 		assert.Equal(t, int64(1), summary.Totals.SessionCount)
 		assert.Equal(t, int64(150), summary.Totals.TotalTokens)
 
@@ -420,6 +450,10 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		require.NotNil(t, summary.Totals.EstimatedCostUsd)
 		assert.InDelta(t, 0.0, *summary.Totals.EstimatedCostUsd, 1e-9)
 		assert.Equal(t, models.CostCompletenessNone, summary.Totals.CostCompleteness)
+		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Equal(t, 0, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(0), *summary.Totals.UnpricedTokenCount)
 		assert.Empty(t, summary.ByModel)
 		assert.Empty(t, summary.ByAlertType)
 		assert.Empty(t, summary.ByChain)
@@ -464,6 +498,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessComplete, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 0, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(0), *summary.Totals.UnpricedTokenCount)
 		require.Len(t, summary.ByModel, 1)
 		require.NotNil(t, summary.ByModel[0].Priced)
 		assert.True(t, *summary.ByModel[0].Priced)

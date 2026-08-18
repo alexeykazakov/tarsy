@@ -181,6 +181,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.InDelta(t, totalCost, toFloat(totals["estimated_cost_usd"]), 1e-12)
 		assert.InDelta(t, totalCost/2, toFloat(totals["average_cost_usd"]), 1e-12)
 		assert.Equal(t, "complete", totals["cost_completeness"])
+		assert.Equal(t, 0, toInt(totals["unpriced_interaction_count"]))
+		assert.Equal(t, 0, toInt(totals["unpriced_token_count"]))
 
 		byModel, ok := usage["by_model"].([]interface{})
 		require.True(t, ok)
@@ -313,6 +315,10 @@ func TestUsageCost_EstimationDisabled(t *testing.T) {
 	assert.False(t, hasUsageCost)
 	_, hasAvgCost := totals["average_cost_usd"]
 	assert.False(t, hasAvgCost)
+	_, hasUnpricedTokens := totals["unpriced_token_count"]
+	assert.False(t, hasUnpricedTokens, "unpriced_token_count must be omitted when estimation is disabled")
+	_, hasUnpricedInteractions := totals["unpriced_interaction_count"]
+	assert.False(t, hasUnpricedInteractions, "unpriced_interaction_count must be omitted when estimation is disabled")
 
 	// rank_by=cost is rejected when estimation is disabled.
 	app.getJSON(t, fmt.Sprintf(
