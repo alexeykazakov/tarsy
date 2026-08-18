@@ -132,18 +132,31 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 			CostEstimationEnabled: true,
 			RankBy:                UsageRankByCost,
 			Totals: UsageTotals{
+				SessionCount:     1,
 				EstimatedCostUsd: &zero,
+				AverageCostUsd:   &zero,
 				CostCompleteness: CostCompletenessNone,
 			},
 			ByModel: []UsageModelBreakdown{{
 				ModelName:        "m",
+				SessionCount:     2,
 				EstimatedCostUsd: &zero,
+				AverageCostUsd:   &zero,
 				Priced:           &priced,
+			}},
+			ByAlertType: []UsageAlertBreakdown{{
+				AlertType:        "oom",
+				SessionCount:     2,
+				EstimatedCostUsd: &zero,
+				AverageCostUsd:   &zero,
 			}},
 		}
 		raw, err := json.Marshal(resp)
 		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"session_count":1`)
+		assert.Contains(t, string(raw), `"session_count":2`)
 		assert.Contains(t, string(raw), `"estimated_cost_usd":0`)
+		assert.Contains(t, string(raw), `"average_cost_usd":0`)
 		assert.Contains(t, string(raw), `"cost_completeness":"none"`)
 		assert.Contains(t, string(raw), `"priced":false`)
 	})
@@ -158,6 +171,8 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 		}
 		raw, err := json.Marshal(resp)
 		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"session_count":0`)
+		assert.NotContains(t, string(raw), "average_cost_usd")
 		assert.NotContains(t, string(raw), "estimated_cost_usd")
 		assert.NotContains(t, string(raw), "cost_completeness")
 		assert.NotContains(t, string(raw), `"priced"`)

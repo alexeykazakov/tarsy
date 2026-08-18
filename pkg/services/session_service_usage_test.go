@@ -60,9 +60,12 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 
 		summary, err := service.GetUsageSummary(ctx, params)
 		require.NoError(t, err)
+		assert.Equal(t, int64(1), summary.Totals.SessionCount)
 		assert.Equal(t, int64(150), summary.Totals.TotalTokens)
 		require.NotNil(t, summary.Totals.EstimatedCostUsd)
 		assert.InDelta(t, 0.01, *summary.Totals.EstimatedCostUsd, 1e-9)
+		require.NotNil(t, summary.Totals.AverageCostUsd)
+		assert.InDelta(t, 0.01, *summary.Totals.AverageCostUsd, 1e-9)
 		assert.Equal(t, models.UsageRankByCost, summary.RankBy)
 		assert.Equal(t, windowStart, summary.Window.Start)
 		assert.Equal(t, windowEnd, summary.Window.End)
@@ -86,6 +89,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 
 		summary, err := delSvc.GetUsageSummary(ctx, params)
 		require.NoError(t, err)
+		assert.Equal(t, int64(0), summary.Totals.SessionCount)
+		assert.Nil(t, summary.Totals.AverageCostUsd)
 		assert.Equal(t, int64(0), summary.Totals.TotalTokens)
 		assert.Empty(t, summary.TopSessions)
 		assert.Empty(t, summary.ByModel)
@@ -120,6 +125,12 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		}
 		require.Contains(t, byModel, "priced-model")
 		require.Contains(t, byModel, "unpriced-model")
+		assert.Equal(t, int64(1), byModel["priced-model"].SessionCount)
+		require.NotNil(t, byModel["priced-model"].AverageCostUsd)
+		assert.InDelta(t, 0.012, *byModel["priced-model"].AverageCostUsd, 1e-9)
+		assert.Equal(t, int64(1), byModel["unpriced-model"].SessionCount)
+		require.NotNil(t, byModel["unpriced-model"].AverageCostUsd)
+		assert.InDelta(t, 0.0, *byModel["unpriced-model"].AverageCostUsd, 1e-9)
 		require.NotNil(t, byModel["priced-model"].Priced)
 		assert.True(t, *byModel["priced-model"].Priced)
 		require.NotNil(t, byModel["priced-model"].UnpricedInteractionCount)
@@ -133,6 +144,54 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessPartial, summary.TopSessions[0].CostCompleteness)
 		require.NotNil(t, summary.TopSessions[0].EstimatedCostUsd)
 		assert.InDelta(t, 0.012, *summary.TopSessions[0].EstimatedCostUsd, 1e-9)
+	})
+
+	t.Run("model average counts distinct sessions that used that model", func(t *testing.T) {
+		oc := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, oc.Client)
+		ctx := t.Context()
+
+		aID, aStage, aExec := seedUsageSession(t, oc.Client, usageSeed{
+			AlertData: "shared-a",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		seedLLMInteraction(t, oc.Client, aID, aStage, aExec, "shared-model", 10, 10, 20, floatPtr(0.10), 0)
+		seedLLMInteraction(t, oc.Client, aID, aStage, aExec, "solo-model", 20, 20, 40, floatPtr(0.40), 0)
+
+		bID, bStage, bExec := seedUsageSession(t, oc.Client, usageSeed{
+			AlertData: "shared-b",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow.Add(time.Minute),
+		})
+		seedLLMInteraction(t, oc.Client, bID, bStage, bExec, "shared-model", 30, 30, 60, floatPtr(0.30), 0)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), summary.Totals.SessionCount)
+		require.NotNil(t, summary.Totals.AverageCostUsd)
+		assert.InDelta(t, 0.40, *summary.Totals.AverageCostUsd, 1e-9)
+
+		byModel := map[string]models.UsageModelBreakdown{}
+		for _, m := range summary.ByModel {
+			byModel[m.ModelName] = m
+		}
+		require.Contains(t, byModel, "shared-model")
+		require.Contains(t, byModel, "solo-model")
+
+		assert.Equal(t, int64(2), byModel["shared-model"].SessionCount)
+		require.NotNil(t, byModel["shared-model"].EstimatedCostUsd)
+		assert.InDelta(t, 0.40, *byModel["shared-model"].EstimatedCostUsd, 1e-9)
+		require.NotNil(t, byModel["shared-model"].AverageCostUsd)
+		assert.InDelta(t, 0.20, *byModel["shared-model"].AverageCostUsd, 1e-9)
+
+		assert.Equal(t, int64(1), byModel["solo-model"].SessionCount)
+		require.NotNil(t, byModel["solo-model"].EstimatedCostUsd)
+		assert.InDelta(t, 0.40, *byModel["solo-model"].EstimatedCostUsd, 1e-9)
+		require.NotNil(t, byModel["solo-model"].AverageCostUsd)
+		assert.InDelta(t, 0.40, *byModel["solo-model"].AverageCostUsd, 1e-9)
 	})
 
 	t.Run("null costs treated as zero with none completeness", func(t *testing.T) {
@@ -186,6 +245,10 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.UsageRankByCost, byCost.RankBy)
 		assert.Equal(t, priceyID, byCost.TopSessions[0].SessionID)
 		assert.Equal(t, cheapID, byCost.TopSessions[1].SessionID)
+		require.Len(t, byCost.ByModel, 1)
+		assert.Equal(t, int64(2), byCost.ByModel[0].SessionCount)
+		require.NotNil(t, byCost.ByModel[0].AverageCostUsd)
+		assert.InDelta(t, (0.001+5.0)/2, *byCost.ByModel[0].AverageCostUsd, 1e-9)
 
 		byTokens, err := svc.GetUsageSummary(ctx, models.UsageSummaryParams{
 			StartDate: windowStart,
@@ -226,7 +289,10 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 			ChainID:   "chain-a",
 		})
 		require.NoError(t, err)
+		assert.Equal(t, int64(1), filtered.Totals.SessionCount)
 		assert.Equal(t, int64(100), filtered.Totals.TotalTokens)
+		require.NotNil(t, filtered.Totals.AverageCostUsd)
+		assert.InDelta(t, 0.1, *filtered.Totals.AverageCostUsd, 1e-9)
 		require.Len(t, filtered.ByAlertType, 1)
 		assert.Equal(t, "type-a", filtered.ByAlertType[0].AlertType)
 		require.Len(t, filtered.ByChain, 1)
@@ -266,25 +332,38 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 
 		summary, err := svc.GetUsageSummary(ctx, params)
 		require.NoError(t, err)
+		assert.Equal(t, int64(3), summary.Totals.SessionCount)
+		require.NotNil(t, summary.Totals.AverageCostUsd)
+		assert.InDelta(t, 0.25, *summary.Totals.AverageCostUsd, 1e-9)
 
 		alertMap := map[string]models.UsageAlertBreakdown{}
 		for _, row := range summary.ByAlertType {
 			alertMap[row.AlertType] = row
 		}
 		require.Contains(t, alertMap, "oom")
+		assert.Equal(t, int64(2), alertMap["oom"].SessionCount)
 		assert.Equal(t, int64(150), alertMap["oom"].TotalTokens)
 		require.NotNil(t, alertMap["oom"].EstimatedCostUsd)
 		assert.InDelta(t, 0.75, *alertMap["oom"].EstimatedCostUsd, 1e-9)
+		require.NotNil(t, alertMap["oom"].AverageCostUsd)
+		assert.InDelta(t, 0.375, *alertMap["oom"].AverageCostUsd, 1e-9)
 		require.Contains(t, alertMap, "idle")
+		assert.Equal(t, int64(1), alertMap["idle"].SessionCount)
 		assert.Equal(t, int64(0), alertMap["idle"].TotalTokens)
+		require.NotNil(t, alertMap["idle"].AverageCostUsd)
+		assert.InDelta(t, 0.0, *alertMap["idle"].AverageCostUsd, 1e-9)
 
 		chainMap := map[string]models.UsageChainBreakdown{}
 		for _, row := range summary.ByChain {
 			chainMap[row.ChainID] = row
 		}
 		require.Contains(t, chainMap, "chain-x")
+		assert.Equal(t, int64(1), chainMap["chain-x"].SessionCount)
 		assert.Equal(t, int64(100), chainMap["chain-x"].TotalTokens)
+		require.NotNil(t, chainMap["chain-x"].AverageCostUsd)
+		assert.InDelta(t, 0.5, *chainMap["chain-x"].AverageCostUsd, 1e-9)
 		require.Contains(t, chainMap, "chain-z")
+		assert.Equal(t, int64(1), chainMap["chain-z"].SessionCount)
 		assert.Equal(t, int64(0), chainMap["chain-z"].TotalTokens)
 	})
 
@@ -306,13 +385,23 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.False(t, summary.CostEstimationEnabled)
 		assert.Equal(t, models.UsageRankByTokens, summary.RankBy)
 		assert.Nil(t, summary.Totals.EstimatedCostUsd)
+		assert.Nil(t, summary.Totals.AverageCostUsd)
 		assert.Empty(t, summary.Totals.CostCompleteness)
 		assert.Nil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Equal(t, int64(1), summary.Totals.SessionCount)
 		assert.Equal(t, int64(150), summary.Totals.TotalTokens)
 
 		require.Len(t, summary.ByModel, 1)
+		assert.Equal(t, int64(1), summary.ByModel[0].SessionCount)
 		assert.Nil(t, summary.ByModel[0].EstimatedCostUsd)
+		assert.Nil(t, summary.ByModel[0].AverageCostUsd)
 		assert.Nil(t, summary.ByModel[0].Priced)
+		require.Len(t, summary.ByAlertType, 1)
+		assert.Equal(t, int64(1), summary.ByAlertType[0].SessionCount)
+		assert.Nil(t, summary.ByAlertType[0].AverageCostUsd)
+		require.Len(t, summary.ByChain, 1)
+		assert.Equal(t, int64(1), summary.ByChain[0].SessionCount)
+		assert.Nil(t, summary.ByChain[0].AverageCostUsd)
 
 		require.Len(t, summary.TopSessions, 1)
 		assert.Nil(t, summary.TopSessions[0].EstimatedCostUsd)
@@ -325,6 +414,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 
 		summary, err := svc.GetUsageSummary(ctx, params)
 		require.NoError(t, err)
+		assert.Equal(t, int64(0), summary.Totals.SessionCount)
+		assert.Nil(t, summary.Totals.AverageCostUsd)
 		assert.Equal(t, int64(0), summary.Totals.TotalTokens)
 		require.NotNil(t, summary.Totals.EstimatedCostUsd)
 		assert.InDelta(t, 0.0, *summary.Totals.EstimatedCostUsd, 1e-9)
@@ -399,6 +490,12 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, int64(80), summary.Totals.TotalTokens)
 		require.NotNil(t, summary.Totals.EstimatedCostUsd)
 		assert.InDelta(t, 0.35, *summary.Totals.EstimatedCostUsd, 1e-9)
+		require.Len(t, summary.ByModel, 1)
+		assert.Equal(t, int64(1), summary.ByModel[0].SessionCount)
+		require.NotNil(t, summary.ByModel[0].AverageCostUsd)
+		assert.InDelta(t, 0.35, *summary.ByModel[0].AverageCostUsd, 1e-9)
+		require.Len(t, summary.ByAlertType, 1)
+		assert.Equal(t, int64(1), summary.ByAlertType[0].SessionCount)
 	})
 
 	t.Run("empty alert_type normalized to nil in top_sessions", func(t *testing.T) {
@@ -445,6 +542,7 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, summary.TopSessions, 20)
+		assert.Equal(t, int64(21), summary.Totals.SessionCount)
 		assert.Equal(t, int64(210), summary.TopSessions[0].TotalTokens)
 		assert.Equal(t, int64(20), summary.TopSessions[19].TotalTokens)
 		for _, item := range summary.TopSessions {
@@ -531,4 +629,34 @@ func seedUsageLLMInteractionType(
 		create = create.SetEstimatedCostUsd(*costUSD)
 	}
 	create.SaveX(context.Background())
+}
+
+func TestUsageAverageCostUSD(t *testing.T) {
+	t.Parallel()
+	cost := 1.5
+	zero := 0.0
+	tests := []struct {
+		name         string
+		cost         *float64
+		sessionCount int64
+		wantNil      bool
+		want         float64
+	}{
+		{name: "nil cost", cost: nil, sessionCount: 3, wantNil: true},
+		{name: "zero sessions", cost: &cost, sessionCount: 0, wantNil: true},
+		{name: "divides cost by count", cost: &cost, sessionCount: 3, want: 0.5},
+		{name: "zero cost with sessions", cost: &zero, sessionCount: 2, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := usageAverageCostUSD(tt.cost, tt.sessionCount)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.InDelta(t, tt.want, *got, 1e-9)
+		})
+	}
 }
