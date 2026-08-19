@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -538,6 +539,10 @@ func TestTryFallback_UpdatesExecutionRecord(t *testing.T) {
 	assert.Equal(t, string(config.LLMBackendLangChain), *exec.OriginalLlmBackend)
 	assert.Equal(t, "fallback-1", *exec.LlmProvider)
 	assert.Equal(t, string(config.LLMBackendNativeGemini), exec.LlmBackend)
+	require.NotNil(t, exec.OriginalModelName, "original_model_name should be set")
+	assert.Equal(t, "test-model", *exec.OriginalModelName)
+	require.NotNil(t, exec.ModelName)
+	assert.Equal(t, "fallback-model-1", *exec.ModelName)
 }
 
 func TestTryFallback_PreservesOriginalOnSecondFallback(t *testing.T) {
@@ -569,6 +574,26 @@ func TestTryFallback_PreservesOriginalOnSecondFallback(t *testing.T) {
 	require.NotNil(t, exec.OriginalLlmProvider)
 	assert.Equal(t, "primary", *exec.OriginalLlmProvider, "original should be preserved across multiple fallbacks")
 	assert.Equal(t, "fallback-2", *exec.LlmProvider, "current should be updated to latest fallback")
+	require.NotNil(t, exec.OriginalModelName)
+	assert.Equal(t, "test-model", *exec.OriginalModelName, "original model should be preserved across multiple fallbacks")
+	require.NotNil(t, exec.ModelName)
+	assert.Equal(t, "fallback-model-2", *exec.ModelName, "current model should be updated to latest fallback")
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(context.Background(), execCtx.SessionID)
+	require.NoError(t, err)
+	var originalModels, fallbackModels []any
+	for _, evt := range events {
+		if evt.EventType == timelineevent.EventTypeProviderFallback {
+			originalModels = append(originalModels, evt.Metadata["original_model"])
+			fallbackModels = append(fallbackModels, evt.Metadata["fallback_model"])
+		}
+	}
+	require.Len(t, originalModels, 2)
+	assert.Equal(t, "test-model", originalModels[0])
+	assert.Equal(t, "fallback-model-1", fallbackModels[0])
+	assert.Equal(t, "fallback-model-1", originalModels[1],
+		"second hop original_model should be the previous fallback model, not the primary")
+	assert.Equal(t, "fallback-model-2", fallbackModels[1])
 }
 
 func TestNativeToolsDroppedOnFallback(t *testing.T) {

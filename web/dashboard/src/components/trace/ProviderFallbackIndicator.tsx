@@ -29,6 +29,9 @@ function stripEnvelope(raw: string): string {
 export default function ProviderFallbackIndicator({ overview }: ProviderFallbackIndicatorProps) {
   const hasFallback = !!overview.original_llm_provider;
   const [expanded, setExpanded] = useState(false);
+  const modelLabel = overview.model_name || overview.llm_provider;
+  const originalLabel = overview.original_model_name || overview.original_llm_provider;
+  const modelFieldLabel = overview.model_name ? 'Model' : 'Provider';
 
   if (!hasFallback) {
     return (
@@ -38,9 +41,9 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
             <strong>Backend:</strong> {overview.llm_backend}
           </Typography>
         )}
-        {overview.llm_provider && (
+        {modelLabel && (
           <Typography variant="body2" color="text.secondary">
-            <strong>Provider:</strong> {overview.llm_provider}
+            <strong>{modelFieldLabel}:</strong> {modelLabel}
           </Typography>
         )}
       </>
@@ -52,6 +55,7 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
   const attempt = overview.fallback_attempt;
   const hasDetails = reason.length > 0;
   const formattedReason = reason ? formatError(stripEnvelope(reason)) : '';
+  const originalKind = overview.original_model_name ? 'model' : 'provider';
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -61,9 +65,9 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
             <strong>Backend:</strong> {overview.llm_backend}
           </Typography>
         )}
-        {overview.llm_provider && (
+        {modelLabel && (
           <Typography variant="body2" color="text.secondary">
-            <strong>Provider:</strong> {overview.llm_provider}
+            <strong>{modelFieldLabel}:</strong> {modelLabel}
           </Typography>
         )}
         <Chip
@@ -76,7 +80,7 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
           onClick={hasDetails ? () => setExpanded((prev) => !prev) : undefined}
         />
         <Typography variant="body2" color="text.secondary">
-          (was: {overview.original_llm_provider}
+          (was: {originalLabel}
           {overview.original_llm_backend && overview.original_llm_backend !== overview.llm_backend
             ? ` / ${overview.original_llm_backend}`
             : ''}
@@ -108,7 +112,7 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
           })}
         >
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75, fontStyle: 'italic' }}>
-            The original model ({overview.original_llm_provider}) returned an error, so execution was switched to {overview.llm_provider}.
+            The original {originalKind} ({originalLabel}) returned an error, so execution was switched to {modelLabel}.
           </Typography>
           {formattedReason && (
             <Box>
