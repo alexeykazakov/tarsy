@@ -51,6 +51,11 @@ Project skills live in `.cursor/skills/` (symlinked as `.claude/skills/`). Load 
 - Do not weaken CI, auth, or permission checks without an explicit human request
 - Ask before large architectural changes
 
+## This file
+
+- If a change makes a stated fact here or in `CLAUDE.md` wrong (commands, paths, versions, package map, safety constraints), update that bullet in the same change.
+- Do not add recap, new sections, or session learnings. Keep this file short.
+
 ## Learnings
 
 When using `/learn`, append **non-obvious** discoveries to the nearest relevant `AGENTS.md` (package-level preferred over root). Do not create empty nested files.
